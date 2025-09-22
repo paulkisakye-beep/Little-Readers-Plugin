@@ -53,6 +53,8 @@ jQuery(document).ready(function($) {
         if (loading) loading.style.display = 'block';
         if (grid) grid.innerHTML = '';
 
+        console.log('LRP: Loading books from backend...');
+
         $.ajax({
             url: lrp_ajax.ajax_url,
             type: 'POST',
@@ -62,17 +64,21 @@ jQuery(document).ready(function($) {
                 nonce: lrp_ajax.nonce
             },
             success: function(response) {
+                console.log('LRP: Books API response:', response);
                 if (response.success) {
                     books = response.data;
+                    console.log('LRP: Loaded', books.length, 'books');
                     displayBooks(books);
                     validateCartBooks();
                 } else {
-                    if (grid) grid.innerHTML = '<p style="text-align:center; padding:50px;">Error loading books. Please refresh the page.</p>';
+                    console.error('LRP: Failed to load books:', response.data);
+                    if (grid) grid.innerHTML = '<p style="text-align:center; padding:50px;">Error loading books: ' + (response.data || 'Unknown error') + '</p>';
                 }
                 if (loading) loading.style.display = 'none';
             },
-            error: function() {
-                if (grid) grid.innerHTML = '<p style="text-align:center; padding:50px;">Error loading books. Please refresh the page.</p>';
+            error: function(xhr, status, error) {
+                console.error('LRP: AJAX error loading books:', status, error, xhr.responseText);
+                if (grid) grid.innerHTML = '<p style="text-align:center; padding:50px;">Error loading books. Please check console and refresh the page.</p>';
                 if (loading) loading.style.display = 'none';
             }
         });

@@ -116,12 +116,41 @@ class LittleReadersPlugin {
         $response = wp_remote_get($url, array('timeout' => 30));
         
         if (is_wp_error($response)) {
-            wp_send_json_error('Failed to fetch books');
+            error_log('LRP: Failed to fetch books - ' . $response->get_error_message());
+            wp_send_json_error('Failed to fetch books: ' . $response->get_error_message());
+        }
+        
+        $response_code = wp_remote_retrieve_response_code($response);
+        if ($response_code !== 200) {
+            error_log('LRP: Books API returned status ' . $response_code);
+            wp_send_json_error('Backend returned status ' . $response_code);
         }
         
         $body = wp_remote_retrieve_body($response);
         $data = json_decode($body, true);
-        wp_send_json_success($data);
+        
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            error_log('LRP: Invalid JSON response from books API: ' . $body);
+            wp_send_json_error('Invalid response from backend');
+        }
+        
+        // Check if the Google Apps Script response is successful and extract books
+        if (isset($data['success']) && $data['success'] && isset($data['books'])) {
+            wp_send_json_success($data['books']);
+        } else {
+            $error_msg = 'Failed to load books from backend';
+            if (isset($data['error'])) {
+                $error_msg .= ': ' . $data['error'];
+            } elseif (!isset($data['success'])) {
+                $error_msg .= ': No success field in response';
+            } elseif (!$data['success']) {
+                $error_msg .= ': Backend returned success=false';
+            } elseif (!isset($data['books'])) {
+                $error_msg .= ': No books field in response';
+            }
+            error_log('LRP: ' . $error_msg . ' - Response: ' . $body);
+            wp_send_json_error($error_msg);
+        }
     }
     
     private function proxy_check_availability($backend_url, $post_data) {
@@ -166,11 +195,23 @@ class LittleReadersPlugin {
         $response = wp_remote_get($url, array('timeout' => 30));
         
         if (is_wp_error($response)) {
-            wp_send_json_error('Failed to get delivery areas');
+            error_log('LRP: Failed to get delivery areas - ' . $response->get_error_message());
+            wp_send_json_error('Failed to get delivery areas: ' . $response->get_error_message());
+        }
+        
+        $response_code = wp_remote_retrieve_response_code($response);
+        if ($response_code !== 200) {
+            error_log('LRP: Delivery areas API returned status ' . $response_code);
+            wp_send_json_error('Backend returned status ' . $response_code);
         }
         
         $body = wp_remote_retrieve_body($response);
         $data = json_decode($body, true);
+        
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            error_log('LRP: Invalid JSON response from delivery areas API: ' . $body);
+            wp_send_json_error('Invalid response from backend');
+        }
         
         // Cache for 3 hours
         set_transient($cache_key, $data, 3 * HOUR_IN_SECONDS);
