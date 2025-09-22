@@ -288,6 +288,11 @@ class LittleReadersPlugin {
     private function proxy_process_order($backend_url, $api_key, $post_data) {
         $order_data = json_decode(stripslashes($post_data['order_data']), true);
         
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            error_log('LRP: Invalid order data JSON: ' . $post_data['order_data']);
+            wp_send_json_error('Invalid order data');
+        }
+        
         // Add API key as a query parameter
         $url = $backend_url . '?apiKey=' . urlencode($api_key);
         
@@ -301,11 +306,25 @@ class LittleReadersPlugin {
         ));
         
         if (is_wp_error($response)) {
-            wp_send_json_error('Failed to process order');
+            error_log('LRP: Failed to process order - ' . $response->get_error_message());
+            wp_send_json_error('Failed to process order: ' . $response->get_error_message());
+        }
+        
+        $response_code = wp_remote_retrieve_response_code($response);
+        if ($response_code !== 200) {
+            error_log('LRP: Process order API returned status ' . $response_code);
+            wp_send_json_error('Backend returned status ' . $response_code);
         }
         
         $body = wp_remote_retrieve_body($response);
         $data = json_decode($body, true);
+        
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            error_log('LRP: Invalid JSON response from process order API: ' . $body);
+            wp_send_json_error('Invalid response from backend');
+        }
+        
+        error_log('LRP: Order processing response: ' . $body);
         wp_send_json_success($data);
     }
     

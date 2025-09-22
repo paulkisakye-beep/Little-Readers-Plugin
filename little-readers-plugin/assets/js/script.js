@@ -334,19 +334,29 @@ jQuery(document).ready(function($) {
             },
             success: function(response) {
                 console.log('LRP: Promo validation response:', response);
-                if (response.success && response.data && response.data.valid) {
-                    activePromo = { code: response.data.code, discount: response.data.discount };
-                    if (errorMsg) errorMsg.textContent = "";
-                    const promoInputContainer = document.getElementById('lrpPromoInputContainer');
-                    const promoInfoText = document.getElementById('lrpPromoInfoText');
-                    const promoAppliedContainer = document.getElementById('lrpPromoAppliedContainer');
-                    
-                    if (promoInputContainer) promoInputContainer.style.display = 'none';
-                    if (promoInfoText) promoInfoText.textContent = `${response.data.code} (${Math.round(response.data.discount * 100)}% off) Applied!`;
-                    if (promoAppliedContainer) promoAppliedContainer.style.display = 'flex';
+                console.log('LRP: Response data structure:', JSON.stringify(response, null, 2));
+                
+                if (response.success && response.data) {
+                    if (response.data.valid) {
+                        activePromo = { code: response.data.code, discount: response.data.discount };
+                        if (errorMsg) errorMsg.textContent = "";
+                        const promoInputContainer = document.getElementById('lrpPromoInputContainer');
+                        const promoInfoText = document.getElementById('lrpPromoInfoText');
+                        const promoAppliedContainer = document.getElementById('lrpPromoAppliedContainer');
+                        
+                        if (promoInputContainer) promoInputContainer.style.display = 'none';
+                        if (promoInfoText) promoInfoText.textContent = `${response.data.code} (${Math.round(response.data.discount * 100)}% off) Applied!`;
+                        if (promoAppliedContainer) promoAppliedContainer.style.display = 'flex';
+                        console.log('LRP: Promo code applied successfully:', activePromo);
+                    } else {
+                        activePromo = null;
+                        console.log('LRP: Promo code invalid:', response.data);
+                        if (errorMsg) errorMsg.textContent = "Invalid or expired promo code.";
+                    }
                 } else {
                     activePromo = null;
-                    if (errorMsg) errorMsg.textContent = "Invalid or expired promo code.";
+                    console.error('LRP: Unexpected promo validation response structure:', response);
+                    if (errorMsg) errorMsg.textContent = "Error validating promo code.";
                 }
                 updateOrderSummary(cart.reduce((sum, b) => sum + (b.price || 0), 0));
                 if (applyBtn) {
@@ -589,14 +599,19 @@ jQuery(document).ready(function($) {
     }
 
     function resetOrderForm() {
-        activePromo = null;
-        selectedDeliveryFee = null;
-        
         const form = document.getElementById('lrpOrderForm');
         if (form) form.reset();
         
         const phoneInput = document.getElementById('lrpCustomerPhone');
         if (phoneInput) phoneInput.value = '+256';
+        
+        // Keep delivery area and fee if they were already selected
+        const areaInput = document.getElementById('lrpDeliveryArea');
+        const currentArea = areaInput ? areaInput.value : '';
+        const currentFee = selectedDeliveryFee;
+        
+        // Reset promo code only
+        activePromo = null;
         
         const promoInputContainer = document.getElementById('lrpPromoInputContainer');
         const promoAppliedContainer = document.getElementById('lrpPromoAppliedContainer');
@@ -605,6 +620,12 @@ jQuery(document).ready(function($) {
         if (promoInputContainer) promoInputContainer.style.display = 'flex';
         if (promoAppliedContainer) promoAppliedContainer.style.display = 'none';
         if (successMessage) successMessage.style.display = 'none';
+        
+        // Restore delivery area and fee if they were set
+        if (currentArea && currentFee !== null) {
+            if (areaInput) areaInput.value = currentArea;
+            selectedDeliveryFee = currentFee;
+        }
         
         updateOrderSummary(cart.reduce((sum, b) => sum + (b.price || 0), 0));
     }
@@ -705,6 +726,10 @@ jQuery(document).ready(function($) {
                         promoCode: promoCode 
                     };
                     
+                    console.log('LRP: Submitting order with data:', orderData);
+                    console.log('LRP: Selected delivery fee:', selectedDeliveryFee);
+                    console.log('LRP: Active promo:', activePromo);
+                    
                     // Process the order
                     $.ajax({
                         url: lrp_ajax.ajax_url,
@@ -716,7 +741,8 @@ jQuery(document).ready(function($) {
                             nonce: lrp_ajax.nonce
                         },
                         success: function(orderResponse) {
-                            if (orderResponse.success && orderResponse.data.success) {
+                            console.log('LRP: Order submission response:', orderResponse);
+                            if (orderResponse.success && orderResponse.data && orderResponse.data.success) {
                                 const orderForm = document.getElementById('lrpOrderForm');
                                 const successMessage = document.getElementById('lrpSuccessMessage');
                                 
@@ -738,14 +764,17 @@ jQuery(document).ready(function($) {
                                     loadBooks(); 
                                 }, 7000);
                             } else {
-                                alert('Failed to submit order: ' + (orderResponse.data?.error || 'Unknown error'));
+                                console.error('LRP: Order submission failed:', orderResponse);
+                                const errorMsg = orderResponse.data?.error || orderResponse.message || 'Unknown error';
+                                alert('Failed to submit order: ' + errorMsg);
                                 if (submitBtn) {
                                     submitBtn.disabled = false;
                                     submitBtn.textContent = 'Place Order';
                                 }
                             }
                         },
-                        error: function() {
+                        error: function(xhr, status, error) {
+                            console.error('LRP: AJAX error submitting order:', status, error, xhr.responseText);
                             alert('Error submitting order. Please try again.');
                             if (submitBtn) {
                                 submitBtn.disabled = false;
