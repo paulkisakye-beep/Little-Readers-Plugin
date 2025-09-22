@@ -1,0 +1,684 @@
+/**************************************************************
+ * LITTLE READERS UG BOOKSTORE BACKEND – COMPLETE & FINAL VERSION
+ * Google Apps Script (bound to the Google Sheet)
+ **************************************************************/
+
+const CONFIG = {
+  SPREADSHEET_ID: "1CTFpUaGqxKUICPzbDSnkdBiAbS2n5ZNZqjxCwI7xRbs",
+  BUSINESS_NAME: "Little Readers Ug",
+  PHONE_NUMBER: "256781884082",
+  MOBILE_MONEY_NAME: "Patience Kabasiita",
+  MOBILE_MONEY_NUMBER: "0781884082",
+  FREE_DELIVERY_THRESHOLD: 300000,
+  PAYMENT_DEADLINE_HOURS: 24,
+  DELIVERY_SHEET_NAME: "DeliveryRates",
+  API_KEY: "LRU_WebApp_Key_2025" // only required for external doPost API usage
+};
+
+// ===== Column Index Maps (1-based to match Sheets) =====
+const COL = {
+  CODE: 1, TITLE: 2, AUTHOR: 3, CATEGORY: 4, AGE_GROUP: 5, PRICE: 6, IMAGE_URL: 7,
+  AVAILABLE: 8, RESERVED_UNTIL: 9, RESERVED_BY: 10, ADDED_DATE: 11, SOLD_DATE: 12
+};
+const ORD = {
+  ID: 1, TIMESTAMP: 2, NAME: 3, PHONE: 4, DELIVERY_AREA: 5, DELIVERY_ADDRESS: 6,
+  BOOK_CODES: 7, BOOK_TITLES: 8, SUBTOTAL: 9, DELIVERY_FEE: 10, TOTAL: 11,
+  PAYMENT_STATUS: 12, PAYMENT_DEADLINE: 13, PAYMENT_DATE: 14, NOTES: 15
+};
+const STATS = { DATE: 1, ORDERS: 2, BOOKS_SOLD: 3, REVENUE: 4 };
+
+/* ============================================================
+ * Helpers
+ * ============================================================
+ */
+function getSS() { return SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID); }
+function getSheet(name) { return getSS().getSheetByName(name); }
+function tz() { return getSS().getSpreadsheetTimeZone(); }
+function todayDateString() {
+  return Utilities.formatDate(new Date(), tz(), "yyyy-MM-dd");
+}
+function jsonResponse(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+function logAction(bookCode, action, customer, details) {
+  try {
+    const audit = getSheet("AuditLog");
+    if (audit) {
+      audit.appendRow([new Date(), bookCode, action, customer || "System", details || ""]);
+    }
+  } catch(e) {
+    Logger.log(`Failed to write to AuditLog: ${e.toString()}`);
+  }
+}
+function logSmsFailure(orderId, customerName, phone, total, error) {
+  try {
+    const fail = getSheet("SMS_Failures");
+    if (fail) {
+      fail.appendRow([ new Date(), orderId, customerName, phone, total, error || "Unknown error", "Pending" ]);
+    }
+  } catch(e) {
+     Logger.log(`Failed to write to SMS_Failures: ${e.toString()}`);
+  }
+}
+function getCached(key, fetchFn, ttlSeconds=300) {
+  const cache = CacheService.getScriptCache();
+  const data = cache.get(key);
+  if (data) return JSON.parse(data);
+  const fresh = fetchFn();
+  cache.put(key, JSON.stringify(fresh), ttlSeconds);
+  return fresh;
+}
+
+/* ============================================================
+ * Phone Validation / Formatting (UG numbers)
+ * ============================================================
+ */
+function formatUgPhoneNumber(phone) {
+  let p = String(phone).replace(/[^\d+]/g, '').trim();
+  if (p.startsWith('0')) p = '+256' + p.substring(1);
+  else if (p.startsWith('256') && !p.startsWith('+256')) p = '+' + p;
+  else if (!p.startsWith('+256')) return null;
+  if (p.length !== 13) return null;
+  const fourthDigit = p.charAt(4);
+  if (!['3','4','7','8'].includes(fourthDigit)) return null;
+  return p;
+}
+
+/* ============================================================
+ * Delivery (sheet-driven)
+ * ============================================================
+ */
+function getDeliveryPrice(area) {
+  const sheet = getSheet(CONFIG.DELIVERY_SHEET_NAME);
+  if (!sheet) return { found: false, price: null, matched: null };
+  const data = sheet.getDataRange().getValues();
+  const areaNorm = String(area || "").trim().toLowerCase();
+
+  for (let i = 1; i < data.length; i++) {
+    const name = String(data[i][0] || '').trim().toLowerCase();
+    if (name === areaNorm) {
+      return { found: true, price: Number(data[i][1] || 0), matched: data[i][0] };
+    }
+  }
+  for (let i = 1; i < data.length; i++) {
+    const name = String(data[i][0] || '').trim().toLowerCase();
+    if (areaNorm.includes(name) || name.includes(areaNorm)) {
+      return { found: true, price: Number(data[i][1] || 0), matched: data[i][0] };
+    }
+  }
+  return { found: false, price: null, matched: null };
+}
+function getAllDeliveryAreas() {
+  return getCached("areas", () => {
+    const sheet = getSheet(CONFIG.DELIVERY_SHEET_NAME);
+    const data = sheet ? sheet.getDataRange().getValues() : [];
+    return data.slice(1).map(r => r[0]).filter(Boolean);
+  }, 3600);
+}
+
+/* ============================================================
+ * Promo Manager
+ * ============================================================
+ */
+function getPromoFromSheet(code) {
+  const sheet = getSheet('PromoCodes');
+  if (!sheet) return null;
+  const data = sheet.getDataRange().getValues();
+  const now = new Date();
+  const normalized = String(code || "").trim().toUpperCase();
+  if (!normalized) return null;
+
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    const promoCode = String(row[0] || "").trim().toUpperCase();
+    const discount = Number(row[1] || 0) / 100;
+    const active = String(row[2]).toUpperCase() === "TRUE";
+    const activatedAt = row[3] ? new Date(row[3]) : null;
+
+    if (promoCode === normalized && active && activatedAt && now >= activatedAt && (now - activatedAt) <= 24*60*60*1000) {
+      return { code: promoCode, discount };
+    }
+  }
+  return null;
+}
+function validatePromo(code) {
+  const p = getPromoFromSheet(code);
+  return p ? { valid: true, code: p.code, discount: p.discount }
+           : { valid: false, code: String(code || "").toUpperCase(), discount: 0 };
+}
+
+/* ============================================================
+ * Inventory
+ * ============================================================
+ */
+function getAvailableBooks() {
+  try {
+    const sheet = getSheet('Inventory');
+    const data = sheet.getDataRange().getValues();
+    const now = new Date();
+    const books = [];
+    let changed = false;
+
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      const reservedUntil = row[COL.RESERVED_UNTIL-1] ? new Date(row[COL.RESERVED_UNTIL-1]) : null;
+      const soldDate = row[COL.SOLD_DATE-1] ? new Date(row[COL.SOLD_DATE-1]) : null;
+      if ((row[COL.AVAILABLE-1] === false || String(row[COL.AVAILABLE-1]).toUpperCase()==='FALSE') && reservedUntil && now > reservedUntil && !soldDate) {
+        sheet.getRange(i+1, COL.AVAILABLE).setValue('TRUE');
+        sheet.getRange(i+1, COL.RESERVED_UNTIL).setValue('');
+        sheet.getRange(i+1, COL.RESERVED_BY).setValue('');
+        logAction(row[COL.CODE-1], 'AUTO_RELEASED', 'System', 'Reservation expired');
+        row[COL.AVAILABLE-1] = 'TRUE';
+        row[COL.RESERVED_UNTIL-1] = '';
+        row[COL.RESERVED_BY-1] = '';
+        changed = true;
+      }
+    }
+    if (changed) SpreadsheetApp.flush();
+
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      const reservedUntil = row[COL.RESERVED_UNTIL-1] ? new Date(row[COL.RESERVED_UNTIL-1]) : null;
+      const soldDate = row[COL.SOLD_DATE-1] ? new Date(row[COL.SOLD_DATE-1]) : null;
+      let status = "available", available = false;
+      if (soldDate && !isNaN(soldDate.getTime())) {
+        status = "sold";
+      } else if (reservedUntil && new Date() < reservedUntil) {
+        status = "reserved";
+      } else if (String(row[COL.AVAILABLE-1]).toUpperCase() === "TRUE") {
+        available = true;
+      }
+      books.push({
+        code: row[COL.CODE-1], title: row[COL.TITLE-1], author: row[COL.AUTHOR-1], category: row[COL.CATEGORY-1],
+        ageGroup: row[COL.AGE_GROUP-1], price: row[COL.PRICE-1],
+        image: row[COL.IMAGE_URL-1] || ('https://via.placeholder.com/280x350?text=' + encodeURIComponent(row[COL.TITLE-1] || 'Book')),
+        available, status
+      });
+    }
+    return { success: true, books, timestamp: new Date().toISOString() };
+  } catch (err) {
+    Logger.log("getAvailableBooks error: " + err);
+    return { success: false, error: err.toString() };
+  }
+}
+
+function checkBooksAvailability(bookCodes) {
+  try {
+    const sheet = getSheet('Inventory');
+    const data = sheet.getDataRange().getValues();
+    const now = new Date();
+    const availability = {};
+    bookCodes.forEach(code => {
+      availability[code] = { available: false, status: "unavailable" };
+      for (let i = 1; i < data.length; i++) {
+        if (data[i][COL.CODE - 1] === code) {
+          const reservedUntil = data[i][COL.RESERVED_UNTIL - 1] ? new Date(data[i][COL.RESERVED_UNTIL - 1]) : null;
+          const soldDate = data[i][COL.SOLD_DATE - 1] ? new Date(data[i][COL.SOLD_DATE - 1]) : null;
+          if (soldDate && !isNaN(soldDate.getTime())) {
+            availability[code] = { available: false, status: "sold" };
+          } else if (reservedUntil && now < reservedUntil) {
+            availability[code] = { available: false, status: "reserved" };
+          } else if (data[i][COL.AVAILABLE - 1] === true || String(data[i][COL.AVAILABLE - 1]).toUpperCase() === 'TRUE') {
+            availability[code] = { available: true, status: "available" };
+          }
+          break;
+        }
+      }
+    });
+    return availability;
+  } catch (err) {
+    Logger.log("checkBooksAvailability error: " + err);
+    return {};
+  }
+}
+
+function reserveBooks(bookCodes, customerName, hours) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+  } catch (e) {
+    Logger.log('reserveBooks: lock not acquired');
+    return { reserved: [], failed: bookCodes.map(c => ({ code: c, status: "system_busy" })) };
+  }
+  try {
+    const sheet = getSheet('Inventory');
+    const data = sheet.getDataRange().getValues();
+    const deadline = new Date();
+    deadline.setHours(deadline.getHours() + hours);
+    const reserved = [], failed = [];
+    bookCodes.forEach(code => {
+      let found = false;
+      for (let i = 1; i < data.length; i++) {
+        if (data[i][COL.CODE - 1] === code) {
+          found = true;
+          const soldDate = data[i][COL.SOLD_DATE - 1] ? new Date(data[i][COL.SOLD_DATE - 1]) : null;
+          const reservedUntil = data[i][COL.RESERVED_UNTIL - 1] ? new Date(data[i][COL.RESERVED_UNTIL - 1]) : null;
+          const now = new Date();
+          if (soldDate && !isNaN(soldDate.getTime())) { failed.push({ code, status: "sold" }); break; }
+          if (reservedUntil && now < reservedUntil) { failed.push({ code, status: "reserved" }); break; }
+          if (data[i][COL.AVAILABLE - 1] === true || String(data[i][COL.AVAILABLE - 1]).toUpperCase() === 'TRUE') {
+            sheet.getRange(i + 1, COL.AVAILABLE).setValue('FALSE');
+            sheet.getRange(i + 1, COL.RESERVED_UNTIL).setValue(deadline);
+            sheet.getRange(i + 1, COL.RESERVED_BY).setValue(customerName);
+            logAction(code, 'RESERVED', customerName, `Reserved for ${hours} hours`);
+            reserved.push({ code, title: data[i][COL.TITLE - 1], price: data[i][COL.PRICE - 1] });
+          } else {
+            failed.push({ code, status: "unavailable" });
+          }
+          break;
+        }
+      }
+      if (!found) failed.push({ code, status: "notfound" });
+    });
+    SpreadsheetApp.flush();
+    return { reserved, failed };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/* ============================================================
+ * Orders (UPDATED WITH FIX)
+ * ============================================================
+ */
+function processOrder(orderData) {
+  try {
+    if (!orderData || !orderData.customerName || !orderData.customerPhone || !orderData.deliveryArea || !orderData.books || !orderData.books.length) {
+      return { success: false, message: "Missing required fields" };
+    }
+    const validPhone = formatUgPhoneNumber(orderData.customerPhone);
+    if (!validPhone) return { success: false, message: "Invalid Uganda phone number (+2567XXXXXXXX)" };
+
+    const area = getDeliveryPrice(orderData.deliveryArea);
+    if (!area.found) return { success: false, message: "We do not deliver to this area." };
+
+    const codes = orderData.books.map(b => b.code);
+    const reservation = reserveBooks(codes, orderData.customerName, CONFIG.PAYMENT_DEADLINE_HOURS);
+    if (reservation.reserved.length === 0) {
+      return { success: false, message: "Sorry, none of the selected books are available." };
+    }
+    if (reservation.failed.length > 0) {
+      return {
+        success: false,
+        message: `Some books are no longer available: ${reservation.failed.map(f => `${f.code} (${f.status})`).join(', ')}`,
+        booksFailed: reservation.failed
+      };
+    }
+
+    const orderId = 'ORD' + Date.now().toString().slice(-8);
+    const timestamp = new Date();
+    const deadline = new Date(timestamp.getTime() + CONFIG.PAYMENT_DEADLINE_HOURS * 3600000);
+
+    const origSubtotal = reservation.reserved.reduce((s, b) => s + (b.price || 0), 0);
+    const promo = getPromoFromSheet(orderData.promoCode);
+    const discount = promo ? Math.round(origSubtotal * promo.discount) : 0;
+    const subtotal = origSubtotal - discount;
+
+    const finalDeliveryFee = (subtotal >= CONFIG.FREE_DELIVERY_THRESHOLD && area.price > 0) ? 0 : area.price;
+    const total = subtotal + finalDeliveryFee;
+
+    const orders = getSheet('Orders');
+    orders.appendRow([
+      orderId, timestamp, orderData.customerName, validPhone,
+      area.matched, orderData.deliveryNotes || '',
+      reservation.reserved.map(b => b.code).join(', '),
+      reservation.reserved.map(b => b.title).join(' | '),
+      subtotal, finalDeliveryFee, total, 'Pending',
+      deadline, '', promo ? `Promo ${promo.code}` : (orderData.promoCode ? `Promo entered but invalid/expired: ${orderData.promoCode}` : '')
+    ]);
+
+    const smsResult = sendSmsEgoSMS(validPhone, orderData.customerName, reservation.reserved, total, null);
+    if (!smsResult || /error|failed/i.test(String(smsResult))) {
+      logSmsFailure(orderId, orderData.customerName, validPhone, total, `Order SMS: ${smsResult}`);
+    }
+
+    // *** FIX APPLIED HERE ***
+    // Wrap non-critical stats update in its own try-catch block.
+    try {
+      updateDailyStats(reservation.reserved.length, total);
+    } catch (statsErr) {
+      Logger.log(`CRITICAL: Failed to update daily stats for Order ${orderId}. Error: ${statsErr.toString()}`);
+      logAction(orderId, 'STATS_UPDATE_FAILED', 'System', statsErr.toString());
+    }
+    
+    SpreadsheetApp.flush();
+
+    return {
+      success: true,
+      orderId,
+      message: "Order placed successfully.",
+      booksReserved: reservation.reserved,
+      total,
+      promoApplied: promo ? promo.code : null
+    };
+  } catch (err) {
+    Logger.log(`processOrder error: ${err.toString()}`);
+    return { success: false, message: err.message || 'Failed to process order', error: err.toString() };
+  }
+}
+
+/* ============================================================
+ * Mark Sold & SMS
+ * ============================================================
+ */
+function markBooksAsSold(orderId) {
+  const ordersSheet = getSheet('Orders');
+  const inventorySheet = getSheet('Inventory');
+  if (!ordersSheet || !inventorySheet) return false;
+  const orders = ordersSheet.getDataRange().getValues();
+  const inventory = inventorySheet.getDataRange().getValues();
+  let orderRow = null;
+  for (let i = 1; i < orders.length; i++) {
+    if (orders[i][ORD.ID - 1] === orderId) { orderRow = orders[i]; break; }
+  }
+  if (!orderRow) return false;
+  if (String(orderRow[ORD.PAYMENT_STATUS - 1] || "").toLowerCase() !== 'paid') return false;
+  const bookCodes = String(orderRow[ORD.BOOK_CODES - 1] || '').split(',').map(s => s.trim()).filter(Boolean);
+  const soldDate = new Date();
+  for (let i = 1; i < inventory.length; i++) {
+    const code = inventory[i][COL.CODE - 1];
+    if (bookCodes.includes(code)) {
+      inventorySheet.getRange(i + 1, COL.AVAILABLE).setValue('FALSE');
+      inventorySheet.getRange(i + 1, COL.RESERVED_UNTIL).setValue('');
+      inventorySheet.getRange(i + 1, COL.RESERVED_BY).setValue('');
+      inventorySheet.getRange(i + 1, COL.SOLD_DATE).setValue(soldDate);
+      logAction(code, 'SOLD', orderRow[ORD.NAME - 1], 'Sold and removed from inventory');
+    }
+  }
+  SpreadsheetApp.flush();
+  return true;
+}
+
+function sendSmsEgoSMS(phone, customerName, reservedBooks, total, customMessage) {
+  const props = PropertiesService.getScriptProperties();
+  const username = props.getProperty('EGO_USERNAME');
+  const password = props.getProperty('EGO_PASSWORD');
+  if (!username || !password) {
+    Logger.log('SMS credentials not configured (EGO_USERNAME/EGO_PASSWORD)');
+    return 'error: credentials not configured';
+  }
+  const sender = 'LRU';
+  const formattedPhone = formatUgPhoneNumber(phone);
+  if (!formattedPhone) return 'error: invalid phone number format';
+  let smsMessage = customMessage;
+  if (!smsMessage) {
+    const titles = (reservedBooks || []).map(b => b.title).join(', ');
+    smsMessage = `Hi ${customerName}. Total: UGX ${Number(total||0).toLocaleString()}. Pay to ${CONFIG.MOBILE_MONEY_NUMBER} in ${CONFIG.PAYMENT_DEADLINE_HOURS}hrs. Thx. ${CONFIG.BUSINESS_NAME}. ${titles ? `Books: ${titles}.` : ''}`;
+  }
+  const url = `https://www.egosms.co/api/v1/plain/?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}&number=${encodeURIComponent(formattedPhone)}&sender=${encodeURIComponent(sender)}&message=${encodeURIComponent(smsMessage)}`;
+  const options = { method: 'get', muteHttpExceptions: true };
+  try {
+    const response = UrlFetchApp.fetch(url, options);
+    const result = response.getContentText();
+    Logger.log('EgoSMS response: ' + result);
+    return result;
+  } catch (err) {
+    Logger.log('EgoSMS error: ' + err);
+    return 'error: ' + err.toString();
+  }
+}
+/**
+ * Sends payment reminders for unpaid orders via SMS.
+ * Marks reminders sent in the Orders sheet Notes column.
+ */
+function sendPaymentReminders() {
+  Logger.log("sendPaymentReminders called");
+  const ordersSheet = getSheet('Orders');
+  const data = ordersSheet.getDataRange().getValues();
+  const now = new Date();
+  let remindersSent = 0;
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    const orderId = row[ORD.ID - 1];
+    const timestamp = row[ORD.TIMESTAMP - 1];
+    const customerName = row[ORD.NAME - 1];
+    const customerPhone = row[ORD.PHONE - 1];
+    const paymentStatus = (row[ORD.PAYMENT_STATUS - 1] || '').toString().trim();
+    const deadline = row[ORD.PAYMENT_DEADLINE - 1];
+    const books = row[ORD.BOOK_TITLES - 1];
+    const total = row[ORD.TOTAL - 1];
+
+    // Skip if order is already paid
+    if (paymentStatus.toLowerCase() === 'paid') continue;
+
+    // Parse timestamp and deadline
+    if (!timestamp || !deadline) continue;
+    const orderTime = new Date(timestamp);
+    const deadlineTime = new Date(deadline);
+    const hoursSinceOrder = (now - orderTime) / (1000 * 60 * 60);
+
+    // Send reminder if 12+ hours since reservation, but not yet expired (within 24h)
+    if (hoursSinceOrder >= 12 && now < deadlineTime) {
+      // Avoid duplicate reminders: Use Notes column to track
+      let notes = row[ORD.NOTES - 1] || '';
+      if (notes.includes('reminder sent')) continue;
+
+      // Compose reminder message
+      var message = "Hi " + customerName + 
+        ". This is a friendly reminder from Little Readers Ug: Your reserved books are awaiting payment. " +
+        "Please pay UGX " + total.toLocaleString() + " to 0781884082 before your reservation expires. Thanks!";
+
+      // Send SMS via EgoSMS
+      var smsResult = sendSmsEgoSMS(customerPhone, customerName, [], total, message);
+      
+      // Check if reminder SMS failed
+      if (!smsResult || smsResult.toLowerCase().includes('error') || smsResult.toLowerCase().includes('failed')) {
+        Logger.log('Reminder SMS failed for order ' + orderId);
+        logSmsFailure(orderId, customerName, customerPhone, total, 'Reminder: ' + smsResult);
+      }
+
+      // Mark reminder sent in Notes column
+      notes += (notes ? "; " : "") + "reminder sent " + now.toISOString();
+      ordersSheet.getRange(i+1, ORD.NOTES).setValue(notes);
+
+      remindersSent++;
+    }
+  }
+  SpreadsheetApp.flush();
+  Logger.log("Reminders sent: " + remindersSent);
+  return remindersSent;
+}
+
+/* ============================================================
+ * Stats & Analytics
+ * ============================================================
+ */
+function updateDailyStats(booksSold, revenue) {
+  const stats = getSheet('Stats');
+  if (!stats) {
+    Logger.log("Warning: 'Stats' sheet not found. Cannot update daily statistics.");
+    return;
+  }
+  const today = todayDateString();
+  const data = stats.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (new Date(data[i][STATS.DATE - 1]).toDateString() === new Date(today).toDateString()) {
+      stats.getRange(i + 1, STATS.ORDERS).setValue((data[i][STATS.ORDERS - 1] || 0) + 1);
+      stats.getRange(i + 1, STATS.BOOKS_SOLD).setValue((data[i][STATS.BOOKS_SOLD - 1] || 0) + booksSold);
+      stats.getRange(i + 1, STATS.REVENUE).setValue((data[i][STATS.REVENUE - 1] || 0) + revenue);
+      return;
+    }
+  }
+  stats.appendRow([new Date(today), 1, booksSold, revenue]);
+}
+
+function getAnalytics() {
+  const orders = getSheet('Orders');
+  const data = orders ? orders.getDataRange().getValues() : [[]];
+  const analytics = {
+    totalOrders: Math.max(0, (data.length - 1)),
+    pendingOrders: 0, paidOrders: 0,
+    totalRevenue: 0, deliveryAreas: {},
+    conversionRate: "0%", averageOrderValue: 0
+  };
+  for (let i = 1; i < data.length; i++) {
+    const status = String(data[i][ORD.PAYMENT_STATUS - 1] || '');
+    const total = Number(data[i][ORD.TOTAL - 1] || 0);
+    const area = data[i][ORD.DELIVERY_AREA - 1];
+    if (/paid/i.test(status)) { analytics.paidOrders++; analytics.totalRevenue += total; }
+    else if (/pending/i.test(status)) { analytics.pendingOrders++; }
+    if (area) analytics.deliveryAreas[area] = (analytics.deliveryAreas[area] || 0) + 1;
+  }
+  if (analytics.totalOrders > 0) {
+    analytics.conversionRate = ((analytics.paidOrders / analytics.totalOrders) * 100).toFixed(1) + '%';
+    analytics.averageOrderValue = analytics.paidOrders ? Math.round(analytics.totalRevenue / analytics.paidOrders) : 0;
+  }
+  return analytics;
+}
+
+
+/* ============================================================
+ * UI Helpers (custom menu)
+ * ============================================================
+ */
+function onOpen() {
+  const ui = SpreadsheetApp.getUi();
+  ui.createMenu('📚 Bookstore Manager')
+    .addItem('🚀 Initial Setup', 'setupSheets')
+    .addItem('📊 View Analytics', 'showAnalytics')
+    .addSeparator()
+    .addItem('⚙️ Create SMS Trigger (Run Once)', 'createOnEditTrigger')
+    .addItem('🔑 Setup SMS Credentials', 'showCredentialsInstructions')
+    .addItem('🔗 Web App Deployment Steps', 'showWebAppInstructions')
+    .addToUi();
+}
+function setupSheets() {
+  const ss = getSS();
+  const sheetsToCreate = {
+    'Inventory': ['Book Code','Title','Author','Category','Age Group','Price','Image URL','Available','Reserved Until','Reserved By','Added Date','Sold Date'],
+    'Orders': ['Order ID','Timestamp','Customer Name','Phone','Delivery Area','Delivery Address','Books (Codes)','Book Titles','Subtotal','Delivery Fee','Total','Payment Status','Payment Deadline','Payment Date','Notes'],
+    'DeliveryRates': ['Area','Fee'],
+    'PromoCodes': ['Code','Discount (%)','Active','Activated At'],
+    'Stats': ['Date','Orders','Books Sold','Revenue'],
+    'SMS_Failures': ['Timestamp','Order ID','Customer Name','Phone','Total Amount','Error','Retry Status'],
+    'AuditLog': ['Timestamp','Book Code','Action','Customer','Details']
+  };
+  for (const sheetName in sheetsToCreate) {
+    let sheet = ss.getSheetByName(sheetName);
+    if (!sheet) {
+      sheet = ss.insertSheet(sheetName);
+      sheet.appendRow(sheetsToCreate[sheetName]);
+      sheet.getRange('1:1').setFontWeight('bold');
+    }
+  }
+}
+
+function showAnalytics() {
+  const a = getAnalytics();
+  const ui = SpreadsheetApp.getUi();
+  const topAreas = Object.entries(a.deliveryAreas)
+    .sort((x,y)=>y[1]-x[1]).slice(0,5)
+    .map(([area,c])=>`• ${area}: ${c} orders`).join('\n') || '—';
+  const msg =
+    `BOOKSTORE ANALYTICS\n\n` +
+    `Total Orders: ${a.totalOrders}\n` +
+    `Paid Orders: ${a.paidOrders}\n` +
+    `Pending Orders: ${a.pendingOrders}\n` +
+    `Total Revenue: UGX ${a.totalRevenue.toLocaleString()}\n` +
+    `Conversion Rate: ${a.conversionRate}\n` +
+    `Avg Order Value: UGX ${Number(a.averageOrderValue).toLocaleString()}\n\n` +
+    `Top Delivery Areas:\n${topAreas}`;
+  ui.alert('Analytics Dashboard', msg, ui.ButtonSet.OK);
+}
+function showCredentialsInstructions() {
+  SpreadsheetApp.getUi().alert(
+    '🔑 Setup SMS Credentials',
+    'Set Script Properties:\nEGO_USERNAME = <your EgoSMS username>\nEGO_PASSWORD = <your EgoSMS password>\n\nExtensions → Apps Script → Project Settings → Script Properties.',
+    SpreadsheetApp.getUi().ButtonSet.OK
+  );
+}
+function showWebAppInstructions() {
+  SpreadsheetApp.getUi().alert(
+    'Web App Deployment',
+    'Extensions → Apps Script → Deploy → New Deployment → Type: Web App → Execute as: Me → Who has access: Anyone (or Anyone with the link) → Deploy.\nCopy the Web App URL.',
+    SpreadsheetApp.getUi().ButtonSet.OK
+  );
+}
+
+/* ============================================================
+ * Web App Endpoints
+ * ============================================================
+ */
+function doGet(e) {
+  if (e && e.parameter && e.parameter.action) return handleApiRequest(e);
+  return HtmlService.createHtmlOutputFromFile('index')
+    .addMetaTag('viewport','width=device-width, initial-scale=1')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+function doPost(e) {
+  try {
+    const apiKey = e.parameter?.apiKey;
+    if (apiKey !== CONFIG.API_KEY) return jsonResponse({ success:false, error: "Unauthorized" });
+    const data = JSON.parse(e.postData.contents);
+    const result = processOrder(data);
+    return jsonResponse(result);
+  } catch (err) {
+    return jsonResponse({ success:false, error: err.toString() });
+  }
+}
+
+function handleApiRequest(e) {
+  const action = e.parameter.action;
+  switch (action) {
+    case "getBooks": return jsonResponse(getAvailableBooks());
+    case "checkAvailability": return jsonResponse(checkBooksAvailability((e.parameter.codes || "").split(",")));
+    case "deliveryPrice": return jsonResponse(getDeliveryPrice(e.parameter.area));
+    case "deliveryAreas": return jsonResponse(getAllDeliveryAreas());
+    case "validatePromo": return jsonResponse(validatePromo(e.parameter.code || ""));
+    default: return jsonResponse({ error: "Invalid action" });
+  }
+}
+
+/* ============================================================
+ * SMS TRIGGER SETUP & HANDLER
+ * ============================================================
+ */
+function createOnEditTrigger() {
+  const triggers = ScriptApp.getProjectTriggers();
+  for (let i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === "handleOrderStatusChange") {
+      ScriptApp.deleteTrigger(triggers[i]);
+    }
+  }
+  ScriptApp.newTrigger("handleOrderStatusChange")
+    .forSpreadsheet(getSS())
+    .onEdit()
+    .create();
+  SpreadsheetApp.getUi().alert("✅ Success", "The trigger to send SMS notifications on payment has been created.", SpreadsheetApp.getUi().ButtonSet.OK);
+}
+
+function handleOrderStatusChange(e) {
+  try {
+    const range = e.range;
+    const sheet = range.getSheet();
+    if (sheet.getName() !== "Orders" || range.getColumn() !== ORD.PAYMENT_STATUS) return;
+
+    const newStatus = String(e.value || '').toLowerCase();
+    const oldStatus = String(e.oldValue || '').toLowerCase();
+    if (newStatus !== 'paid' || newStatus === oldStatus) return;
+
+    const row = range.getRow();
+    const orderRow = sheet.getRange(row, 1, 1, sheet.getLastColumn()).getValues()[0];
+    const orderId = orderRow[ORD.ID - 1];
+    const name = orderRow[ORD.NAME - 1];
+    const phone = orderRow[ORD.PHONE - 1];
+    const total = Number(orderRow[ORD.TOTAL - 1] || 0);
+
+    sheet.getRange(row, ORD.PAYMENT_DATE).setValue(new Date());
+    markBooksAsSold(orderId);
+
+    const msg = `Hi ${name}, thank you for your payment of UGX ${total.toLocaleString()}.\nYour books will be delivered soon.\n- ${CONFIG.BUSINESS_NAME}`;
+    const smsResult = sendSmsEgoSMS(phone, name, [], total, msg);
+
+    if (!smsResult || /error|failed/i.test(String(smsResult))) {
+      logSmsFailure(orderId, name, phone, total, 'Payment SMS: ' + smsResult);
+    } else {
+      logAction(orderId, 'PAYMENT_CONFIRMED_SMS', name, 'Confirmation SMS sent successfully');
+    }
+  } catch (err) {
+    Logger.log('handleOrderStatusChange Error: ' + err.toString());
+    logSmsFailure("ERROR", "System", "", "", 'Trigger failed: ' + err.toString());
+  }
+}

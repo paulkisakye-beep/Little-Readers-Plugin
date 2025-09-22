@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Little Readers Ug</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Little Readers UG - Pre-Loved Children's Books</title>
+  <link href="https://fonts.googleapis.com/css?family=Montserrat:400,700|Lora:400,700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --green: #647e46;
+      --offwhite: #f8f8f5;
+      --yellow: #f9b233;
+      --accent: #e5e5e5;
+      --text: #233018;
+      --font-head: 'Lora', serif;
+      --font-body: 'Montserrat', sans-serif;
+      --error: #ad3333;
+      --focus: #e09e1b;
+    }
+    html, body { background: var(--green); color: var(--offwhite); font-family: var(--font-body); margin: 0; padding: 0; min-height: 100vh; }
+    .main-container { background: var(--green); min-height: 100vh; width: 100vw; margin: 0; padding: 0; }
+    .hero-section { max-width: 1200px; margin: 0 auto; padding: 2.5rem 1rem 1.5rem 1rem; background: var(--green); display: flex; flex-direction: column; align-items: flex-start; }
+    .hero-headline { font-family: var(--font-head); font-size: 2.4rem; font-weight: 700; color: var(--offwhite); margin-bottom: 1.1rem; line-height: 1.22; }
+    .hero-subtitle { color: var(--offwhite); font-weight: 700; font-size: 1.1rem; margin-bottom: 0.7rem; letter-spacing: 0.01em; }
+    .hero-desc { color: var(--offwhite); font-weight: 400; font-size: 1.03rem; max-width: 650px; margin-bottom: 2.5rem; line-height: 1.6; letter-spacing: 0.01em; }
+    .yellow-bar { height: 3px; width: 70px; background: var(--yellow); margin: 1.3rem 0 0.6rem 0; border-radius: 2px; }
+    .wa-contact-btn { display: inline-flex; align-items: center; background: var(--yellow); color: var(--text); border: none; border-radius: 50px; padding: 13px 30px; font-size: 1.15em; font-family: var(--font-body); font-weight: bold; margin: 1.2rem 0 2.5rem 0; cursor: pointer; box-shadow: 0 2px 18px rgba(37, 41, 10, 0.08); transition: background 0.2s, transform 0.2s; text-decoration: none; letter-spacing: 0.02em; }
+    .wa-contact-btn svg { margin-right: 12px; width: 1.5em; height: 1.5em; vertical-align: middle; }
+    .wa-contact-btn:hover, .wa-contact-btn:focus { background: var(--focus); color: var(--offwhite); text-decoration: none; outline: 2px solid var(--focus); outline-offset: 2px; transform: scale(1.04);}
+    .filters { display: flex; gap: 1.6rem; flex-wrap: wrap; align-items: flex-end; background: var(--accent); color: var(--text); padding: 1.2rem 2rem 1rem 2rem; margin: 0 auto 0 auto; max-width: 1100px; border-radius: 18px 18px 0 0; box-shadow: 0 6px 18px rgba(70, 70, 30, 0.05); }
+    .filter-group label { font-size: 1em; font-weight: 600; color: var(--green); margin-bottom: 0.3rem; letter-spacing: 0.02em; }
+    .filter-group select, .filter-group input { font-family: var(--font-body); padding: 8px 13px; border: 2px solid #b6c39b; border-radius: 7px; font-size: 1em; background: #fff; color: var(--text); margin-bottom: 0.2rem; transition: border-color 0.2s; }
+    .filter-group select:focus, .filter-group input:focus { border-color: var(--yellow); outline: none; }
+    .filter-group input[type="text"] { width: 180px; }
+    .reset-filters-btn { background: var(--green); color: var(--offwhite); border: none; border-radius: 7px; padding: 8px 18px; font-size: 1em; font-weight: 600; margin-left: 12px; cursor: pointer; transition: background 0.18s, color 0.18s; }
+    .reset-filters-btn:hover, .reset-filters-btn:focus { background: var(--yellow); color: var(--text);}
+    .books-grid { background: var(--offwhite); padding: 2.2rem 2rem; display: grid; grid-template-columns: repeat(3, 1fr); gap: 2rem 1.5rem; max-width: 1100px; margin: 0 auto; border-radius: 0 0 14px 14px; box-shadow: 0 6px 18px rgba(70, 70, 30, 0.04); min-height: 300px; }
+    .book-card { background: #fff; border-radius: 14px; box-shadow: 0 2px 12px rgba(100,126,70,0.10); overflow: hidden; transition: transform 0.18s, box-shadow 0.18s; position: relative; border: 2.5px solid var(--accent);}
+    .book-card:focus-within, .book-card:focus-visible { outline: 2px solid var(--yellow); }
+    .book-card:hover, .book-card:focus-within { transform: scale(1.025); box-shadow: 0 4px 24px rgba(100,126,70,0.17); border-color: var(--yellow);}
+    .book-card.sold-out { opacity: 0.52; pointer-events: none; }
+    .reserved-badge { position: absolute; top: 12px; right: 12px; background: var(--yellow); color: var(--text); padding: 6px 18px; border-radius: 18px; font-weight: bold; z-index: 10; font-size: 0.9em; box-shadow: 0 2px 8px rgba(100,126,70,0.10); }
+    .sold-badge { position: absolute; top: 12px; right: 12px; background: #ad3333; color: #fff; padding: 6px 18px; border-radius: 18px; font-weight: bold; z-index: 10; font-size: 0.9em; box-shadow: 0 2px 8px rgba(100,126,70,0.10); }
+    .unavailable-badge { position: absolute; top: 12px; right: 12px; background: #7a7a7a; color: #fff; padding: 6px 18px; border-radius: 18px; font-weight: bold; z-index: 10; font-size: 0.9em; box-shadow: 0 2px 8px rgba(100,126,70,0.10); }
+    .book-image { width: 100%; height: 280px; object-fit: contain; background: #f8f8f5; display: block; border-radius: 14px 14px 0 0; }
+    .book-info { padding: 18px 16px 16px 16px; }
+    .book-title { font-family: var(--font-head); font-size: 1.13em; font-weight: bold; color: var(--green); margin-bottom: 0.18em; line-height: 1.2; min-height: 48px; }
+    .book-author { color: #2f4219; font-size: 1em; margin-bottom: 6px; font-family: var(--font-body); font-style: italic; }
+    .book-category { display: inline-block; background: var(--yellow); color: var(--text); padding: 2px 12px 2px 12px; border-radius: 12px; font-size: 0.93em; margin-bottom: 10px; margin-top: 1px; }
+    .book-price { font-size: 1.25em; color: #ad8507; font-weight: bold; margin: 12px 0 5px 0; font-family: var(--font-body);}
+    .book-code { color: #757575; font-size: 0.93em; margin-bottom: 9px; font-family: var(--font-body);}
+    .add-to-cart { width: 100%; padding: 12px; background: var(--green); color: var(--offwhite); border: none; border-radius: 7px; font-size: 1.08em; font-weight: bold; cursor: pointer; transition: background 0.22s, box-shadow 0.18s; box-shadow: 0 2px 6px rgba(100,126,70,0.08); margin-top: 7px;}
+    .add-to-cart:hover, .add-to-cart:focus { background: var(--yellow); color: var(--text); outline: 2px solid var(--yellow);}
+    .cart { position: fixed; bottom: 28px; right: 32px; background: var(--green); color: var(--offwhite); padding: 15px 28px; border-radius: 50px; box-shadow: 0 8px 24px rgba(50,80,20,0.17); cursor: pointer; z-index: 1000; font-size: 1.13em; font-family: var(--font-body); font-weight: bold; transition: transform 0.22s, background 0.18s; letter-spacing: 0.01em; }
+    .cart:focus { outline: 2px solid var(--yellow);}
+    .cart:hover, .cart:focus { background: var(--yellow); color: var(--text); transform: scale(1.09);}
+    .cart-count { background: #ad3333; color: #fff; border-radius: 50%; padding: 2px 10px; margin-left: 12px; font-weight: bold; transition: background 0.2s, transform 0.2s;}
+    .cart-count.cart-animate { animation: bump 0.4s; }
+    @keyframes bump { 0% {transform: scale(1);} 30% {transform: scale(1.3);} 55% {transform: scale(0.9);} 70% {transform: scale(1.1);} 100% {transform: scale(1);} }
+    .checkout-modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(100, 126, 70, 0.95); z-index: 2000; overflow-y: auto;}
+    .checkout-content { background: var(--offwhite); max-width: 520px; margin: 60px auto; border-radius: 22px; padding: 32px 24px 30px 24px; animation: slideIn 0.3s; color: var(--text); position: relative; box-shadow: 0 2px 28px rgba(70,70,30,0.11);}
+    @keyframes slideIn { from { transform: translateY(-50px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    .checkout-header { text-align: center; margin-bottom: 22px; color: var(--green);}
+    .checkout-header h2 { font-family: var(--font-head); font-size: 1.5em; margin-bottom: 5px; color: var(--green);}
+    .cart-items { background: #f3f3ed; border-radius: 12px; padding: 15px 12px; margin-bottom: 18px; color: var(--text);}
+    .cart-item { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px solid #e5e5e5; font-size: 1em;}
+    .cart-item:last-child { border-bottom: none;}
+    .remove-item { background: #ad3333; color: #fff; border: none; padding: 4px 11px; border-radius: 6px; cursor: pointer; font-size: 0.95em;}
+    .remove-item:focus { outline: 2px solid var(--yellow);}
+    .form-group { margin-bottom: 19px;}
+    .form-group label { display: block; margin-bottom: 8px; font-weight: 600; color: var(--green); font-size: 1em; font-family: var(--font-body);}
+    .form-group input, .form-group select, .form-group textarea { box-sizing: border-box; width: 100%; padding: 10px 12px; border: 2px solid #b6c39b; border-radius: 7px; font-size: 1em; background: #fff; color: var(--text); transition: border-color 0.2s; font-family: var(--font-body);}
+    .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--yellow); outline: none;}
+    .form-group input.error, .form-group textarea.error, .form-group select.error { border-color: var(--error);}
+    .order-summary { background: #f8f8f5; padding: 17px 12px; border-radius: 10px; margin: 18px 0; color: var(--text);}
+    .summary-row { display: flex; justify-content: space-between; margin: 7px 0; font-size: 1.08em;}
+    .summary-row.total { font-size: 1.18em; font-weight: bold; color: var(--green); border-top: 2px solid #e5e5e5; padding-top: 7px; margin-top: 12px;}
+    .submit-order { width: 100%; padding: 13px; background: var(--green); color: var(--offwhite); border: none; border-radius: 10px; font-size: 1.1em; font-weight: bold; cursor: pointer; letter-spacing: 0.01em; margin-top: 2px; box-shadow: 0 2px 10px rgba(100,126,70,0.07); transition: background 0.19s, color 0.19s; }
+    .submit-order:hover, .submit-order:focus { background: var(--yellow); color: var(--text);}
+    .close-modal { position: absolute; right: 18px; top: 17px; font-size: 2em; cursor: pointer; color: #ad3333; background: none; border: none; z-index: 99;}
+    .close-modal:focus { outline: 2px solid var(--yellow);}
+    .success-message { display: none; background: #eaf2e2; color: #233018; padding: 18px 10px 13px 10px; border-radius: 10px; text-align: center; margin-top: 18px; font-size: 1.1em;}
+    .status-bar { background: #f9b233; color: #233018; padding: 10px 14px; text-align: center; font-weight: bold; display: none; font-size: 1em; letter-spacing: 0.01em;}
+    .loading { display: none; text-align: center; padding: 60px 0; color: var(--green);}
+    .spinner { border: 5px solid #e5e5e5; border-top: 5px solid var(--green); border-radius: 50%; width: 48px; height: 48px; animation: spin 1s linear infinite; margin: 0 auto 15px auto;}
+    @keyframes spin { 0% { transform: rotate(0deg);} 100% { transform: rotate(360deg);} }
+    .promo-applied-msg { background: #eaf2e2; padding: 8px 12px; border-radius: 8px; margin-top: 8px; display: flex; justify-content: space-between; align-items: center; }
+    .promo-info { font-weight: bold; color: var(--green); }
+    .promo-remove-btn { background: #ad3333; color: #fff; border: none; border-radius: 4px; padding: 4px 10px; cursor: pointer; font-size: 0.9em; }
+    .discount-row { color: #ad3333; font-weight: bold; }
+    @media (max-width: 900px) {
+      .books-grid { padding: 1.2rem 0.4rem; grid-template-columns: repeat(2, 1fr);}
+      .filters { padding: 1rem 0.5rem 0.5rem 1rem;}
+      .hero-section { padding: 2rem 0.5rem 1.2rem 0.5rem;}
+    }
+    @media (max-width: 650px) {
+      .hero-headline { font-size: 1.4em; }
+      .books-grid { grid-template-columns: 1fr !important; padding: 1.2rem 0.4rem; }
+      .book-image { height: 54vw; max-height: 360px; width: 100%; object-fit: contain; display: block; }
+      .cart { bottom: 14px; right: 14px; padding: 10px 16px; font-size: 0.97em;}
+      .checkout-content { padding: 24px 5vw 20px 5vw;}
+      .filters { flex-direction: column; gap: 0.7rem;}
+      .book-card { max-width: 95vw; margin: 0 auto; }
+      .book-info { padding: 5vw 2vw 3vw 2vw; }
+    }
+    @media (max-width: 500px) {
+      .books-grid { grid-template-columns: 1fr !important; padding: 1rem 0.2rem; }
+      .book-image { height: 54vw; max-height: 360px; }
+      .main-container, .books-grid, .filters { border-radius: 0;}
+      .checkout-content { max-width: 97vw; margin: 2vw; padding: 7vw 3vw;}
+      .book-card { max-width: 95vw; margin: 0 auto; }
+      .book-info { padding: 5vw 2vw 3vw 2vw; }
+    }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0;}
+  </style>
+</head>
+<body>
+  <div class="main-container">
+    <section class="hero-section" aria-label="Welcome to Little Readers UG">
+      <div class="hero-headline" tabindex="0">Little Readers UG Bookstore</div>
+      <div class="hero-subtitle">Discover Affordable Pre-Loved Children's Books with Little Readers UG</div>
+      <div class="hero-desc">
+        Fill your child's library with magical stories that spark imagination and build a lifelong love of reading. Each book is unique—there's only one copy! Discover new treasures daily, but remember: once a story is claimed, it's gone. If you don't find the perfect book today, check back tomorrow. Our shelves are always changing. Happy reading!
+      </div>
+      <div class="yellow-bar" aria-hidden="true"></div>
+      <a href="https://wa.me/256771675754" class="wa-contact-btn" target="_blank" title="Contact us on WhatsApp" aria-label="Contact us on WhatsApp">
+        <svg aria-hidden="true" viewBox="0 0 32 32" fill="currentColor"><path d="M16.004 2.998c-7.17 0-13 5.833-13 13 0 2.294.625 4.519 1.797 6.477l-1.906 6.958a1.001 1.001 0 0 0 1.23 1.229l6.94-1.895a12.898 12.898 0 0 0 5.939 1.43h.003c7.168 0 13-5.833 13-13s-5.832-13-13-13zm0 23.999c-1.829 0-3.623-.471-5.21-1.367a1 1 0 0 0-.673-.104l-5.223 1.426 1.435-5.236a1 1 0 0 0-.104-.674 10.899 10.899 0 0 1-1.226-5.044c0-6.065 4.934-11 11-11s11 4.935 11 11-4.935 11-11 11zm6.206-7.553c-.339-.17-2.001-.985-2.31-1.098-.309-.114-.535-.17-.76.171s-.87 1.098-1.067 1.324c-.195.227-.39.255-.729.085-.339-.17-1.434-.528-2.73-1.68-1.009-.899-1.693-2.011-1.893-2.349-.195-.339-.021-.522.148-.691.154-.153.339-.396.509-.594.17-.198.227-.34.339-.567.113-.227.057-.426-.028-.595-.085-.17-.76-1.833-1.039-2.515-.273-.657-.55-.567-.76-.577-.197-.009-.426-.011-.655-.011a1.261 1.261 0 0 0-.915.426c-.312.34-1.189 1.162-1.189 2.835 0 1.672 1.219 3.286 1.389 3.513.17.227 2.401 3.672 5.822 4.901.814.281 1.449.449 1.943.575.816.208 1.56.179 2.146.109.655-.078 2.001-.819 2.283-1.61.282-.792.282-1.47.197-1.61-.085-.142-.312-.227-.65-.397z"></path></svg>
+        Contact us on WhatsApp
+      </a>
+    </section>
+    <div class="status-bar" id="statusBar" role="alert" aria-live="assertive">
+      ⚠️ Some books in your cart are no longer available: <span id="statusBarDetails"></span>
+    </div>
+    <div class="filters" aria-label="Book filters">
+      <div class="filter-group">
+        <label for="categoryFilter">Category</label>
+        <select id="categoryFilter">
+          <option value="">All Categories</option>
+          <option value="Picture Books">Picture Books</option>
+          <option value="Early Readers">Early Readers</option>
+          <option value="Chapter Books">Chapter Books</option>
+          <option value="Activity Books">Activity Books</option>
+          <option value="Educational Books">Educational Books</option>
+          <option value="Young Adult Fiction">Young Adult Fiction</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label for="ageFilter">Age Group</label>
+        <select id="ageFilter">
+          <option value="">All Ages</option>
+          <option value="0-3 years">0-3 years</option>
+          <option value="4-6 years">4-6 years</option>
+          <option value="7-9 years">7-9 years</option>
+          <option value="10-15 years">10-15 years</option>
+          <option value="16+ years">16+ years</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label for="priceFilter">Price Range</label>
+        <select id="priceFilter">
+          <option value="">All Prices</option>
+          <option value="0-10000">Under 10,000 UGX</option>
+          <option value="10000-20000">10,000 - 20,000 UGX</option>
+          <option value="20000+">Above 20,000 UGX</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label for="searchBox">Search</label>
+        <input type="text" id="searchBox" placeholder="Search books..." autocomplete="off" />
+      </div>
+      <button type="button" class="reset-filters-btn" id="resetFiltersBtn" aria-label="Reset filters">Reset Filters</button>
+    </div>
+    <div class="loading" id="loadingSpinner" aria-live="polite">
+      <div class="spinner" aria-hidden="true"></div>
+      <p style="color:var(--green);font-size:1.1em;">Loading amazing books...</p>
+    </div>
+    <div class="books-grid" id="booksGrid" role="list">
+      <!-- Books will be loaded here -->
+    </div>
+  </div>
+  <button class="cart" id="cart" onclick="openCheckout()" aria-label="View cart" tabindex="0">
+    🛒 Cart <span class="cart-count" id="cartCount" aria-live="polite">0</span>
+  </button>
+  <div class="checkout-modal" id="checkoutModal" aria-modal="true" role="dialog" aria-label="Checkout Modal">
+    <div class="checkout-content">
+      <button class="close-modal" id="closeModalBtn" onclick="closeCheckout()" aria-label="Close checkout modal">&times;</button>
+      <div class="checkout-header">
+        <h2>🛒 Complete Your Order</h2>
+        <p>You're just one step away from amazing books!</p>
+      </div>
+      <div class="cart-items" id="cartItems">
+        <!-- Cart items will be shown here -->
+      </div>
+      <form id="orderForm" autocomplete="off" novalidate>
+        <div class="form-group">
+          <label for="customerName">Full Name*</label>
+          <input type="text" id="customerName" required aria-required="true" autocomplete="name">
+        </div>
+        <div class="form-group">
+          <label for="customerPhone">Phone Number * (Uganda only)</label>
+          <input type="tel" id="customerPhone" value="+256" required pattern="^\+256\d{9}$" maxlength="13" autocomplete="tel" style="letter-spacing:1.5px;">
+          <small style="color:#ad3333;">Format: +2567XXXXXXXX</small>
+        </div>
+        <div class="form-group">
+          <label for="deliveryArea">Delivery Area *</label>
+          <input type="text" id="deliveryArea" list="areasList" placeholder="Start typing area (e.g. Ntinda, Kira, etc)" autocomplete="off" required aria-required="true" oninput="onDeliveryAreaInput()" />
+          <datalist id="areasList"></datalist>
+          <div id="areaFeeMsg" style="margin-top:7px;color:#ad8507;font-weight:bold;"></div>
+          <div id="areaErrorMsg" style="margin-top:4px;color:#ad3333;"></div>
+        </div>
+        <div class="form-group">
+          <label for="deliveryNotes">Delivery Address/Pickup Notes</label>
+          <textarea id="deliveryNotes" rows="2" placeholder="Please provide detailed delivery address or pickup arrangements"></textarea>
+        </div>
+        <div class="form-group" id="promoCodeGroup">
+          <label for="promoCode">Promo Code</label>
+          <div id="promoInputContainer" style="display:flex;gap:10px;">
+            <input type="text" id="promoCode" placeholder="Enter promo code" style="flex-grow:1;">
+            <button type="button" id="applyPromoBtn" style="background:var(--green);color:white;border:none;border-radius:7px;padding:0 15px;cursor:pointer;">Apply</button>
+          </div>
+          <div id="promoErrorMsg" style="margin-top:4px;color:#ad3333;"></div>
+          <div id="promoAppliedContainer" class="promo-applied-msg" style="display:none;">
+            <span id="promoInfoText" class="promo-info"></span>
+            <button type="button" class="promo-remove-btn" id="removePromoBtn">Remove</button>
+          </div>
+        </div>
+        <div class="order-summary" aria-label="Order summary">
+          <h3>Order Summary</h3>
+          <div class="summary-row">
+            <span>Books Subtotal:</span>
+            <span id="subtotal">0 UGX</span>
+          </div>
+          <div id="discountRow" class="summary-row discount-row" style="display:none;">
+            <span>Discount:</span>
+            <span id="discountAmount">0 UGX</span>
+          </div>
+          <div class="summary-row">
+            <span>Delivery Fee:</span>
+            <span id="deliveryFee">Not selected</span>
+          </div>
+          <div class="summary-row total">
+            <span>Total Amount:</span>
+            <span id="totalAmount">0 UGX</span>
+          </div>
+        </div>
+        <button type="submit" class="submit-order">Place Order</button>
+      </form>
+      <div class="success-message" id="successMessage" role="status" aria-live="polite"></div>
+      <div style="text-align:center;margin-top:13px;">
+        <a href="https://wa.me/256771675754" class="wa-contact-btn" target="_blank" title="Contact us on WhatsApp" aria-label="Chat with us on WhatsApp">
+          <svg aria-hidden="true" viewBox="0 0 32 32" fill="currentColor"><path d="M16.004 2.998c-7.17 0-13 5.833-13 13 0 2.294.625 4.519 1.797 6.477l-1.906 6.958a1.001 1.001 0 0 0 1.23 1.229l6.94-1.895a12.898 12.898 0 0 0 5.939 1.43h.003c7.168 0 13-5.833 13-13s-5.832-13-13-13zm0 23.999c-1.829 0-3.623-.471-5.21-1.367a1 1 0 0 0-.673-.104l-5.223 1.426 1.435-5.236a1 1 0 0 0-.104-.674 10.899 10.899 0 0 1-1.226-5.044c0-6.065 4.934-11 11-11s11 4.935 11 11-4.935 11-11 11zm6.206-7.553c-.339-.17-2.001-.985-2.31-1.098-.309-.114-.535-.17-.76.171s-.87 1.098-1.067 1.324c-.195.227-.39.255-.729.085-.339-.17-1.434-.528-2.73-1.68-1.009-.899-1.693-2.011-1.893-2.349-.195-.339-.021-.522.148-.691.154-.153.339-.396.509-.594.17-.198.227-.34.339-.567.113-.227.057-.426-.028-.595-.085-.17-.76-1.833-1.039-2.515-.273-.657-.55-.567-.76-.577-.197-.009-.426-.011-.655-.011a1.261 1.261 0 0 0-.915.426c-.312.34-1.189 1.162-1.189 2.835 0 1.672 1.219 3.286 1.389 3.513.17.227 2.401 3.672 5.822 4.901.814.281 1.449.449 1.943.575.816.208 1.56.179 2.146.109.655-.078 2.001-.819 2.283-1.61.282-.792.282-1.47.197-1.61-.085-.142-.312-.227-.65-.397z"></path></svg>
+          Chat with us on WhatsApp
+        </a>
+      </div>
+    </div>
+  </div>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const phoneInput = document.getElementById('customerPhone');
+      phoneInput.addEventListener('input', function() {
+        if (!phoneInput.value.startsWith('+256')) {
+          phoneInput.value = '+256';
+        }
+        phoneInput.value = '+256' + phoneInput.value.substring(4).replace(/\D/g, '');
+        phoneInput.value = phoneInput.value.substring(0, 13);
+      });
+    });
+
+    let books = [];
+    let cart = [];
+    let deliveryAreasList = [];
+    let selectedDeliveryFee = null;
+    let lastFocusedElement = null;
+    let activePromo = null; // { code: string, discount: number }
+
+    function saveCart() {
+      localStorage.setItem('littleReadersCart', JSON.stringify(cart));
+    }
+    function loadCart() {
+      try {
+        const data = localStorage.getItem('littleReadersCart');
+        if (data) cart = JSON.parse(data);
+        updateCartCount();
+      } catch (e) { cart = []; }
+    }
+
+    window.onload = function() {
+      loadBooks();
+      setupEventListeners();
+      loadDeliveryAreas();
+      loadCart();
+    };
+
+    function loadBooks() {
+      const grid = document.getElementById('booksGrid');
+      const loading = document.getElementById('loadingSpinner');
+      loading.style.display = 'block';
+      grid.innerHTML = '';
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          if (result.success) {
+            books = result.books;
+            displayBooks(books);
+            validateCartBooks();
+          } else {
+            grid.innerHTML = '<p style="text-align:center; padding:50px;">Error loading books. Please refresh the page.</p>';
+          }
+          loading.style.display = 'none';
+        })
+        .withFailureHandler(function() {
+          grid.innerHTML = '<p style="text-align:center; padding:50px;">Error loading books. Please refresh the page.</p>';
+          loading.style.display = 'none';
+        })
+        .getAvailableBooks();
+    }
+
+    function displayBooks(booksToDisplay) {
+      const grid = document.getElementById('booksGrid');
+      grid.innerHTML = '';
+      if (booksToDisplay.length === 0) {
+        grid.innerHTML = `
+          <div style="text-align:center; padding:60px; font-size:1.15em;color:#7a7a7a;">
+            No books available or matching your filters.<br>
+            <button type="button" class="reset-filters-btn" onclick="resetFilters()">Reset Filters</button>
+          </div>`;
+        return;
+      }
+      booksToDisplay.forEach(book => {
+        const bookCard = createBookCard(book);
+        grid.appendChild(bookCard);
+      });
+    }
+
+    function createBookCard(book) {
+      const card = document.createElement('div');
+      card.className = `book-card${!book.available ? ' sold-out' : ''}`;
+      card.setAttribute('role', 'listitem');
+      card.setAttribute('tabindex', '0');
+      card.setAttribute('aria-label', `${book.title} by ${book.author}${book.available ? '' : ', unavailable'}`);
+
+      let badge = '';
+      if (!book.available) {
+        if (book.status === 'reserved') {
+          badge = `<div class="reserved-badge" title="Reserved by another customer. May become available soon.">RESERVED</div>`;
+        } else if (book.status === 'sold') {
+          badge = `<div class="sold-badge" title="This book has been sold.">SOLD</div>`;
+        } else {
+          badge = `<div class="unavailable-badge">UNAVAILABLE</div>`;
+        }
+      }
+
+      card.innerHTML = `
+        ${badge}
+        <img src="${book.image}" alt="${escapeHTML(book.title)} book cover" class="book-image" loading="lazy"
+          style="background:#f8f8f5;object-fit:contain;display:block;"
+          onerror="this.src='https://via.placeholder.com/280x350?text=Book+Cover'" />
+        <div class="book-info">
+          <div class="book-title">${escapeHTML(book.title)}</div>
+          <div class="book-author">by ${escapeHTML(book.author)}</div>
+          <div class="book-category">${escapeHTML(book.category)}</div>
+          <div class="book-price">UGX ${book.price ? Number(book.price).toLocaleString() : 'N/A'}</div>
+          <div class="book-code">Code: ${escapeHTML(book.code)}</div>
+          ${book.available ? `<button type="button" class="add-to-cart" onclick="addToCart('${escapeHTML(book.code)}', event)" aria-label="Add ${escapeHTML(book.title)} to cart">Add to Cart</button>` : ''}
+        </div>
+      `;
+      return card;
+    }
+
+    function escapeHTML(str) {
+      return String(str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'})[m]);
+    }
+
+    function addToCart(bookCode, evt) {
+      const book = books.find(b => b.code === bookCode);
+      if (!book || !book.available) {
+        alert('Sorry, this book is no longer available!');
+        return;
+      }
+      if (cart.find(item => item.code === bookCode)) {
+        alert('This book is already in your cart!');
+        return;
+      }
+      cart.push(book);
+      updateCartCount(true);
+      saveCart();
+      if (evt && evt.target) {
+        evt.target.innerHTML = '✅ Added!';
+        evt.target.disabled = true;
+        setTimeout(() => {
+          evt.target.innerHTML = 'Add to Cart';
+          evt.target.disabled = false;
+        }, 1000);
+      }
+    }
+
+    function updateCartCount(animate = false) {
+      const cartCount = document.getElementById('cartCount');
+      cartCount.textContent = cart.length;
+      if (animate) {
+        cartCount.classList.remove('cart-animate');
+        void cartCount.offsetWidth;
+        cartCount.classList.add('cart-animate');
+      }
+      saveCart();
+    }
+
+    function openCheckout() {
+      if (cart.length === 0) {
+        alert('Your cart is empty! Add some books first.');
+        return;
+      }
+      updateCartDisplay();
+      const modal = document.getElementById('checkoutModal');
+      modal.style.display = 'block';
+      document.body.style.overflow = 'hidden';
+      lastFocusedElement = document.activeElement;
+      resetOrderForm();
+      trapFocus(modal);
+      validateCartBooks();
+    }
+    function closeCheckout() {
+      const modal = document.getElementById('checkoutModal');
+      modal.style.display = 'none';
+      document.body.style.overflow = 'auto';
+      hideStatusBar();
+      if (lastFocusedElement) lastFocusedElement.focus();
+    }
+
+    function trapFocus(element) {
+      var focusableEls = element.querySelectorAll('a, button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])');
+      var firstFocusableEl = focusableEls[0];
+      var lastFocusableEl = focusableEls[focusableEls.length - 1];
+      element.addEventListener('keydown', function(e) {
+        if (e.key === 'Tab') {
+          if (e.shiftKey) {
+            if (document.activeElement === firstFocusableEl) { e.preventDefault(); lastFocusableEl.focus(); }
+          } else {
+            if (document.activeElement === lastFocusableEl) { e.preventDefault(); firstFocusableEl.focus(); }
+          }
+        }
+        if (e.key === 'Escape') { closeCheckout(); }
+      });
+      if (firstFocusableEl) firstFocusableEl.focus();
+    }
+    window.onclick = function(event) {
+      const modal = document.getElementById('checkoutModal');
+      if (event.target == modal) closeCheckout();
+    };
+
+    function updateCartDisplay() {
+      const cartItemsDiv = document.getElementById('cartItems');
+      cartItemsDiv.innerHTML = '<h3>Your Books:</h3>';
+      let subtotal = 0;
+      cart.forEach((book, index) => {
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'cart-item';
+        const priceText = `UGX ${Number(book.price || 0).toLocaleString()}`;
+        itemDiv.innerHTML = `
+          <div>
+            <strong>${escapeHTML(book.title)}</strong><br>
+            <small>${escapeHTML(book.author)} - ${priceText}</small>
+          </div>
+          <button type="button" class="remove-item" onclick="removeFromCart(${index})" aria-label="Remove ${escapeHTML(book.title)} from cart">Remove</button>
+        `;
+        cartItemsDiv.appendChild(itemDiv);
+        subtotal += (book.price || 0);
+      });
+      updateOrderSummary(subtotal);
+    }
+
+    function removeFromCart(index) {
+      cart.splice(index, 1);
+      updateCartCount(true);
+      saveCart();
+      updateCartDisplay();
+      if (cart.length === 0) closeCheckout();
+    }
+
+    function updateOrderSummary(subtotal) {
+      document.getElementById('subtotal').textContent = `UGX ${subtotal.toLocaleString()}`;
+      const discountRow = document.getElementById('discountRow');
+      const discountAmountEl = document.getElementById('discountAmount');
+      
+      let discountedSubtotal = subtotal;
+      if (activePromo && activePromo.discount > 0) {
+        const discountAmount = Math.round(subtotal * activePromo.discount);
+        discountedSubtotal = subtotal - discountAmount;
+        discountAmountEl.textContent = `- UGX ${discountAmount.toLocaleString()}`;
+        discountRow.style.display = 'flex';
+      } else {
+        discountRow.style.display = 'none';
+      }
+
+      const deliveryFeeEl = document.getElementById('deliveryFee');
+      const totalAmountEl = document.getElementById('totalAmount');
+      if (selectedDeliveryFee === null) {
+        deliveryFeeEl.textContent = 'Not selected';
+        totalAmountEl.textContent = `UGX ${discountedSubtotal.toLocaleString()}`;
+        return;
+      }
+
+      let finalDeliveryFee = selectedDeliveryFee;
+      if (discountedSubtotal >= 300000 && selectedDeliveryFee > 0) {
+        deliveryFeeEl.innerHTML = `<del>UGX ${selectedDeliveryFee.toLocaleString()}</del> FREE! 🎉`;
+        finalDeliveryFee = 0;
+      } else {
+        deliveryFeeEl.textContent = selectedDeliveryFee === 0 ? 'FREE' : `UGX ${selectedDeliveryFee.toLocaleString()}`;
+      }
+
+      const total = discountedSubtotal + finalDeliveryFee;
+      totalAmountEl.textContent = `UGX ${total.toLocaleString()}`;
+    }
+
+    function validatePromoCode() {
+      const input = document.getElementById('promoCode');
+      const code = (input.value || '').trim().toUpperCase();
+      const errorMsg = document.getElementById('promoErrorMsg');
+      const applyBtn = document.getElementById('applyPromoBtn');
+      
+      if (!code) {
+        errorMsg.textContent = "Please enter a promo code.";
+        return;
+      }
+
+      applyBtn.textContent = "Checking...";
+      applyBtn.disabled = true;
+
+      google.script.run
+        .withSuccessHandler(function(res) {
+          if (res && res.valid) {
+            activePromo = { code: res.code, discount: res.discount };
+            errorMsg.textContent = "";
+            document.getElementById('promoInputContainer').style.display = 'none';
+            document.getElementById('promoInfoText').textContent = `${res.code} (${Math.round(res.discount * 100)}% off) Applied!`;
+            document.getElementById('promoAppliedContainer').style.display = 'flex';
+          } else {
+            activePromo = null;
+            errorMsg.textContent = "Invalid or expired promo code.";
+          }
+          updateOrderSummary(cart.reduce((sum, b) => sum + (b.price || 0), 0));
+          applyBtn.textContent = "Apply";
+          applyBtn.disabled = false;
+        })
+        .withFailureHandler(function() {
+          errorMsg.textContent = "Error validating code. Please try again.";
+          applyBtn.textContent = "Apply";
+          applyBtn.disabled = false;
+        })
+        .validatePromo(code);
+    }
+    
+    function removePromo() {
+      activePromo = null;
+      document.getElementById('promoCode').value = '';
+      document.getElementById('promoInputContainer').style.display = 'flex';
+      document.getElementById('promoAppliedContainer').style.display = 'none';
+      document.getElementById('promoErrorMsg').textContent = '';
+      updateOrderSummary(cart.reduce((sum, b) => sum + (b.price || 0), 0));
+    }
+
+    function setupEventListeners() {
+      document.getElementById('orderForm').addEventListener('submit', e => { e.preventDefault(); submitOrder(); });
+      document.getElementById('categoryFilter').addEventListener('change', filterBooks);
+      document.getElementById('ageFilter').addEventListener('change', filterBooks);
+      document.getElementById('priceFilter').addEventListener('change', filterBooks);
+      document.getElementById('searchBox').addEventListener('input', filterBooks);
+      document.getElementById('resetFiltersBtn').addEventListener('click', resetFilters);
+      document.getElementById('closeModalBtn').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') closeCheckout(); });
+      document.getElementById('applyPromoBtn').addEventListener('click', validatePromoCode);
+      document.getElementById('removePromoBtn').addEventListener('click', removePromo);
+      document.getElementById('promoCode').addEventListener('keypress', e => { if (e.key === 'Enter') { e.preventDefault(); validatePromoCode(); } });
+    }
+
+    function filterBooks() {
+      const category = document.getElementById('categoryFilter').value;
+      const ageGroup = document.getElementById('ageFilter').value;
+      const priceRange = document.getElementById('priceFilter').value;
+      const searchTerm = document.getElementById('searchBox').value.toLowerCase();
+      const filtered = books.filter(book => 
+        (!category || book.category === category) &&
+        (!ageGroup || book.ageGroup === ageGroup) &&
+        (!priceRange || (
+          (priceRange === '0-10000' && book.price < 10000) ||
+          (priceRange === '10000-20000' && book.price >= 10000 && book.price <= 20000) ||
+          (priceRange === '20000+' && book.price > 20000)
+        )) &&
+        (!searchTerm || book.title.toLowerCase().includes(searchTerm) || book.author.toLowerCase().includes(searchTerm))
+      );
+      displayBooks(filtered);
+    }
+    function resetFilters() {
+      document.getElementById('categoryFilter').value = '';
+      document.getElementById('ageFilter').value = '';
+      document.getElementById('priceFilter').value = '';
+      document.getElementById('searchBox').value = '';
+      displayBooks(books);
+    }
+
+    function loadDeliveryAreas() {
+      google.script.run
+        .withSuccessHandler(function(areas) {
+          deliveryAreasList = areas;
+          const datalist = document.getElementById('areasList');
+          datalist.innerHTML = '';
+          areas.forEach(area => {
+            const opt = document.createElement('option');
+            opt.value = area;
+            datalist.appendChild(opt);
+          });
+        })
+        .getAllDeliveryAreas();
+    }
+
+    function onDeliveryAreaInput() {
+      const areaInput = document.getElementById('deliveryArea');
+      const area = areaInput.value.trim();
+      const areaFeeMsg = document.getElementById('areaFeeMsg');
+      const areaErrorMsg = document.getElementById('areaErrorMsg');
+
+      if (!area) {
+        areaFeeMsg.textContent = '';
+        areaErrorMsg.textContent = '';
+        selectedDeliveryFee = null;
+        areaInput.classList.remove('error');
+      } else {
+        google.script.run
+          .withSuccessHandler(function(result) {
+            if (result.found) {
+              selectedDeliveryFee = Number(result.price || 0);
+              areaFeeMsg.textContent = `Delivery to ${result.matched}: UGX ${Number(result.price).toLocaleString()}`;
+              areaErrorMsg.textContent = '';
+              areaInput.classList.remove('error');
+            } else {
+              selectedDeliveryFee = null;
+              areaFeeMsg.textContent = '';
+              areaErrorMsg.textContent = "Sorry, we don't deliver to this area.";
+              areaInput.classList.add('error');
+            }
+            updateOrderSummary(cart.reduce((sum, b) => sum + (b.price||0), 0));
+          })
+          .getDeliveryPrice(area);
+      }
+    }
+
+    function validateCartBooks() {
+      if (cart.length === 0) return;
+      const codes = cart.map(b => b.code);
+      google.script.run
+        .withSuccessHandler(function(result) {
+          const unavailable = codes.filter(code => !result[code] || !result[code].available)
+                                   .map(code => ({ code, status: result[code] ? result[code].status : 'unavailable' }));
+          if (unavailable.length > 0) {
+            showStatusBar(unavailable);
+            cart = cart.filter(b => !unavailable.find(u => u.code === b.code));
+            updateCartCount(true);
+            saveCart();
+            updateCartDisplay();
+          } else {
+            hideStatusBar();
+          }
+        })
+        .checkBooksAvailability(codes);
+    }
+
+    function showStatusBar(unavailableBooks) {
+      const bar = document.getElementById('statusBar');
+      const details = document.getElementById('statusBarDetails');
+      bar.style.display = 'block';
+      details.textContent = unavailableBooks.map(b => `${b.code} (${b.status.toUpperCase()})`).join(', ');
+    }
+    function hideStatusBar() {
+      document.getElementById('statusBar').style.display = 'none';
+      document.getElementById('statusBarDetails').textContent = '';
+    }
+
+    function submitOrder() {
+      document.querySelectorAll('.form-group input.error, .form-group textarea.error').forEach(el => el.classList.remove('error'));
+      let valid = true;
+
+      const name = document.getElementById('customerName');
+      const phone = document.getElementById('customerPhone');
+      const area = document.getElementById('deliveryArea');
+
+      if (!name.value.trim()) { name.classList.add('error'); valid = false; }
+      if (!phone.value.match(/^\+256\d{9}$/)) { phone.classList.add('error'); valid = false; }
+      if (!area.value.trim() || selectedDeliveryFee === null) { area.classList.add('error'); valid = false; }
+      if (!valid) {
+        alert('Please fill in all required fields and select a valid delivery area.');
+        return;
+      }
+      if (cart.length === 0) {
+        alert('Your cart is empty!');
+        return;
+      }
+
+      continueSubmitOrder(
+        name.value.trim(),
+        phone.value.trim(),
+        document.getElementById('deliveryNotes').value,
+        area.value.trim(),
+        activePromo ? activePromo.code : ""
+      );
+    }
+
+    function continueSubmitOrder(name, phone, notes, area, promoCode) {
+      const codes = cart.map(b => b.code);
+      const submitBtn = document.querySelector('.submit-order');
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Processing...';
+
+      google.script.run
+        .withSuccessHandler(function(availabilityResult) {
+          const unavailable = codes.filter(code => !availabilityResult[code] || !availabilityResult[code].available)
+                                   .map(code => ({ code, status: availabilityResult[code] ? availabilityResult[code].status : 'unavailable' }));
+          
+          if (unavailable.length > 0) {
+            showStatusBar(unavailable);
+            cart = cart.filter(b => !unavailable.find(u => u.code === b.code));
+            updateCartCount(true);
+            saveCart();
+            updateCartDisplay();
+            alert('Some books in your cart are no longer available and have been removed.');
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Place Order';
+            return;
+          }
+          
+          hideStatusBar();
+          const orderData = { customerName: name, customerPhone: phone, deliveryArea: area, deliveryNotes: notes, books: cart, promoCode };
+          
+          google.script.run
+            .withSuccessHandler(function(orderResult) {
+              if (orderResult.success) {
+                document.getElementById('orderForm').style.display = 'none';
+                document.getElementById('successMessage').innerHTML =
+                  `<h3>✅ Order Submitted Successfully!</h3>
+                   <p><strong>Order ID: ${orderResult.orderId}</strong></p>
+                   <p>Check your SMS for payment details.</p>
+                   <p>Your books are reserved for 24 hours.</p>`;
+                document.getElementById('successMessage').style.display = 'block';
+                cart = [];
+                updateCartCount(true);
+                saveCart();
+                setTimeout(() => {
+                  closeCheckout();
+                  loadBooks(); 
+                }, 7000);
+              } else {
+                alert(`Error: ${orderResult.message || 'Failed to process order'}`);
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Place Order';
+              }
+            })
+            .withFailureHandler(function() {
+              alert('A network error occurred. Please try again.');
+              submitBtn.disabled = false;
+              submitBtn.textContent = 'Place Order';
+            })
+            .processOrder(orderData);
+        })
+        .checkBooksAvailability(codes);
+    }
+
+    function resetOrderForm() {
+      document.getElementById('orderForm').reset();
+      document.getElementById('orderForm').style.display = 'block';
+      document.getElementById('successMessage').style.display = 'none';
+      document.getElementById('areaFeeMsg').textContent = '';
+      document.getElementById('areaErrorMsg').textContent = '';
+      selectedDeliveryFee = null;
+      removePromo(); 
+      updateOrderSummary(cart.reduce((sum, b) => sum + (b.price||0), 0));
+      document.querySelectorAll('.form-group input, .form-group textarea').forEach(el => el.classList.remove('error'));
+      const submitBtn = document.querySelector('.submit-order');
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Place Order';
+    }
+  </script>
+</body>
+</html>
