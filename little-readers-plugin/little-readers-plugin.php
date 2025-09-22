@@ -182,6 +182,15 @@ class LittleReadersPlugin {
     
     private function proxy_delivery_price($backend_url, $post_data) {
         $area = sanitize_text_field($post_data['area']);
+        
+        // Clear cache flag for testing
+        $clear_cache = isset($post_data['clear_cache']) && $post_data['clear_cache'] === 'true';
+        if ($clear_cache) {
+            delete_transient('lrp_delivery_areas');
+            delete_transient('lrp_delivery_price_' . md5($area));
+            error_log('LRP: Cleared delivery cache for debugging');
+        }
+        
         $url = $backend_url . '?action=deliveryPrice&area=' . urlencode($area);
         $response = wp_remote_get($url, array('timeout' => 30));
         
@@ -204,6 +213,7 @@ class LittleReadersPlugin {
             wp_send_json_error('Invalid response from backend');
         }
         
+        error_log('LRP: Delivery price response for area "' . $area . '": ' . $body);
         wp_send_json_success($data);
     }
     

@@ -49,6 +49,14 @@ jQuery(document).ready(function($) {
             resetOrderForm();
             trapFocus(modal);
             validateCartBooks();
+            
+            // Refresh delivery area pricing if already selected
+            const areaInput = document.getElementById('lrpDeliveryArea');
+            if (areaInput && areaInput.value) {
+                console.log('LRP: Refreshing delivery area pricing for:', areaInput.value);
+                // Trigger the area input to refresh pricing
+                onDeliveryAreaInput();
+            }
         }
     };
 
@@ -508,6 +516,7 @@ jQuery(document).ready(function($) {
             if (areaErrorMsg) areaErrorMsg.textContent = '';
             selectedDeliveryFee = null;
             if (areaInput) areaInput.classList.remove('error');
+            updateOrderSummary(cart.reduce((sum, b) => sum + (b.price||0), 0));
         } else {
             console.log('LRP: Checking delivery price for area:', area);
             
@@ -522,16 +531,22 @@ jQuery(document).ready(function($) {
                 },
                 success: function(response) {
                     console.log('LRP: Delivery price response:', response);
-                    if (response.success && response.data.found) {
-                        selectedDeliveryFee = Number(response.data.price || 0);
-                        if (areaFeeMsg) areaFeeMsg.textContent = `Delivery to ${response.data.matched}: UGX ${Number(response.data.price).toLocaleString()}`;
+                    if (response.success && response.data && response.data.found) {
+                        const newFee = Number(response.data.price || 0);
+                        const matchedArea = response.data.matched;
+                        
+                        selectedDeliveryFee = newFee;
+                        if (areaFeeMsg) areaFeeMsg.textContent = `Delivery to ${matchedArea}: UGX ${newFee.toLocaleString()}`;
                         if (areaErrorMsg) areaErrorMsg.textContent = '';
                         if (areaInput) areaInput.classList.remove('error');
+                        
+                        console.log('LRP: Updated delivery fee to:', newFee, 'for area:', matchedArea);
                     } else {
                         selectedDeliveryFee = null;
                         if (areaFeeMsg) areaFeeMsg.textContent = '';
                         if (areaErrorMsg) areaErrorMsg.textContent = "Sorry, we don't deliver to this area.";
                         if (areaInput) areaInput.classList.add('error');
+                        console.log('LRP: No delivery available for area:', area);
                     }
                     updateOrderSummary(cart.reduce((sum, b) => sum + (b.price||0), 0));
                 },
@@ -600,15 +615,18 @@ jQuery(document).ready(function($) {
 
     function resetOrderForm() {
         const form = document.getElementById('lrpOrderForm');
+        const areaInput = document.getElementById('lrpDeliveryArea');
+        const areaFeeMsg = document.getElementById('lrpAreaFeeMsg');
+        
+        // Store current delivery info before reset
+        const currentArea = areaInput ? areaInput.value : '';
+        const currentFee = selectedDeliveryFee;
+        const currentAreaDisplay = areaFeeMsg ? areaFeeMsg.textContent : '';
+        
         if (form) form.reset();
         
         const phoneInput = document.getElementById('lrpCustomerPhone');
         if (phoneInput) phoneInput.value = '+256';
-        
-        // Keep delivery area and fee if they were already selected
-        const areaInput = document.getElementById('lrpDeliveryArea');
-        const currentArea = areaInput ? areaInput.value : '';
-        const currentFee = selectedDeliveryFee;
         
         // Reset promo code only
         activePromo = null;
@@ -625,6 +643,8 @@ jQuery(document).ready(function($) {
         if (currentArea && currentFee !== null) {
             if (areaInput) areaInput.value = currentArea;
             selectedDeliveryFee = currentFee;
+            if (areaFeeMsg) areaFeeMsg.textContent = currentAreaDisplay;
+            console.log('LRP: Restored delivery area:', currentArea, 'with fee:', currentFee);
         }
         
         updateOrderSummary(cart.reduce((sum, b) => sum + (b.price || 0), 0));
@@ -742,7 +762,12 @@ jQuery(document).ready(function($) {
                         },
                         success: function(orderResponse) {
                             console.log('LRP: Order submission response:', orderResponse);
-                            if (orderResponse.success && orderResponse.data && orderResponse.data.success) {
+                            console.log('LRP: Response structure:', JSON.stringify(orderResponse, null, 2));
+                            
+                            // Handle both direct response and nested response structures
+                            let orderData = orderResponse.data || orderResponse;
+                            
+                            if (orderResponse.success && orderData && orderData.success) {
                                 const orderForm = document.getElementById('lrpOrderForm');
                                 const successMessage = document.getElementById('lrpSuccessMessage');
                                 
@@ -750,7 +775,7 @@ jQuery(document).ready(function($) {
                                 if (successMessage) {
                                     successMessage.innerHTML = `
                                         <h3>✅ Order Submitted Successfully!</h3>
-                                        <p><strong>Order ID: ${orderResponse.data.orderId}</strong></p>
+                                        <p><strong>Order ID: ${orderData.orderId}</strong></p>
                                         <p>Check your SMS for payment details.</p>
                                         <p>Your books are reserved for 24 hours.</p>`;
                                     successMessage.style.display = 'block';
@@ -765,7 +790,10 @@ jQuery(document).ready(function($) {
                                 }, 7000);
                             } else {
                                 console.error('LRP: Order submission failed:', orderResponse);
-                                const errorMsg = orderResponse.data?.error || orderResponse.message || 'Unknown error';
+                                // Check multiple possible error message locations
+                                const errorMsg = orderData?.error || orderData?.message || 
+                                               orderResponse.data?.error || orderResponse.message || 
+                                               'Unknown error - check console for details';
                                 alert('Failed to submit order: ' + errorMsg);
                                 if (submitBtn) {
                                     submitBtn.disabled = false;
