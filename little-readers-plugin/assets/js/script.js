@@ -11,6 +11,78 @@ jQuery(document).ready(function($) {
     let lastFocusedElement = null;
     let activePromo = null; // { code: string, discount: number }
 
+    // Global functions for onclick handlers and event listeners
+    window.lrpAddToCart = function(bookCode, evt) {
+        const book = books.find(b => b.code === bookCode);
+        if (!book || !book.available) {
+            alert('Sorry, this book is no longer available!');
+            return;
+        }
+        if (cart.find(item => item.code === bookCode)) {
+            alert('This book is already in your cart!');
+            return;
+        }
+        cart.push(book);
+        updateCartCount(true);
+        saveCart();
+        if (evt && evt.target) {
+            evt.target.innerHTML = '✅ Added!';
+            evt.target.disabled = true;
+            setTimeout(() => {
+                evt.target.innerHTML = 'Add to Cart';
+                evt.target.disabled = false;
+            }, 1000);
+        }
+    };
+
+    window.lrpOpenCheckout = function() {
+        if (cart.length === 0) {
+            alert('Your cart is empty! Add some books first.');
+            return;
+        }
+        updateCartDisplay();
+        const modal = document.getElementById('lrpCheckoutModal');
+        if (modal) {
+            modal.style.display = 'block';
+            document.body.style.overflow = 'hidden';
+            lastFocusedElement = document.activeElement;
+            resetOrderForm();
+            trapFocus(modal);
+            validateCartBooks();
+        }
+    };
+
+    window.lrpCloseCheckout = function() {
+        const modal = document.getElementById('lrpCheckoutModal');
+        if (modal) {
+            modal.style.display = 'none';
+            document.body.style.overflow = 'auto';
+            hideStatusBar();
+            if (lastFocusedElement) lastFocusedElement.focus();
+        }
+    };
+
+    window.lrpRemoveFromCart = function(index) {
+        cart.splice(index, 1);
+        updateCartCount(true);
+        saveCart();
+        updateCartDisplay();
+        if (cart.length === 0) lrpCloseCheckout();
+    };
+
+    window.lrpResetFilters = function() {
+        const categoryFilter = document.getElementById('lrpCategoryFilter');
+        const ageFilter = document.getElementById('lrpAgeFilter');
+        const priceFilter = document.getElementById('lrpPriceFilter');
+        const searchBox = document.getElementById('lrpSearchBox');
+        
+        if (categoryFilter) categoryFilter.value = '';
+        if (ageFilter) ageFilter.value = '';
+        if (priceFilter) priceFilter.value = '';
+        if (searchBox) searchBox.value = '';
+        displayBooks(books);
+    };
+
     // Initialize plugin
     initializePlugin();
 
@@ -142,57 +214,6 @@ jQuery(document).ready(function($) {
         return String(str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'})[m]);
     }
 
-    // Global functions for onclick handlers
-    window.lrpAddToCart = function(bookCode, evt) {
-        const book = books.find(b => b.code === bookCode);
-        if (!book || !book.available) {
-            alert('Sorry, this book is no longer available!');
-            return;
-        }
-        if (cart.find(item => item.code === bookCode)) {
-            alert('This book is already in your cart!');
-            return;
-        }
-        cart.push(book);
-        updateCartCount(true);
-        saveCart();
-        if (evt && evt.target) {
-            evt.target.innerHTML = '✅ Added!';
-            evt.target.disabled = true;
-            setTimeout(() => {
-                evt.target.innerHTML = 'Add to Cart';
-                evt.target.disabled = false;
-            }, 1000);
-        }
-    };
-
-    window.lrpOpenCheckout = function() {
-        if (cart.length === 0) {
-            alert('Your cart is empty! Add some books first.');
-            return;
-        }
-        updateCartDisplay();
-        const modal = document.getElementById('lrpCheckoutModal');
-        if (modal) {
-            modal.style.display = 'block';
-            document.body.style.overflow = 'hidden';
-            lastFocusedElement = document.activeElement;
-            resetOrderForm();
-            trapFocus(modal);
-            validateCartBooks();
-        }
-    };
-
-    window.lrpCloseCheckout = function() {
-        const modal = document.getElementById('lrpCheckoutModal');
-        if (modal) {
-            modal.style.display = 'none';
-            document.body.style.overflow = 'auto';
-            hideStatusBar();
-            if (lastFocusedElement) lastFocusedElement.focus();
-        }
-    };
-
     function updateCartCount(animate = false) {
         const cartCount = document.getElementById('lrpCartCount');
         if (cartCount) {
@@ -245,14 +266,6 @@ jQuery(document).ready(function($) {
         });
         updateOrderSummary(subtotal);
     }
-
-    window.lrpRemoveFromCart = function(index) {
-        cart.splice(index, 1);
-        updateCartCount(true);
-        saveCart();
-        updateCartDisplay();
-        if (cart.length === 0) lrpCloseCheckout();
-    };
 
     function updateOrderSummary(subtotal) {
         const subtotalEl = document.getElementById('lrpSubtotal');
@@ -443,19 +456,6 @@ jQuery(document).ready(function($) {
         );
         displayBooks(filtered);
     }
-
-    window.lrpResetFilters = function() {
-        const categoryFilter = document.getElementById('lrpCategoryFilter');
-        const ageFilter = document.getElementById('lrpAgeFilter');
-        const priceFilter = document.getElementById('lrpPriceFilter');
-        const searchBox = document.getElementById('lrpSearchBox');
-        
-        if (categoryFilter) categoryFilter.value = '';
-        if (ageFilter) ageFilter.value = '';
-        if (priceFilter) priceFilter.value = '';
-        if (searchBox) searchBox.value = '';
-        displayBooks(books);
-    };
 
     function loadDeliveryAreas() {
         $.ajax({
