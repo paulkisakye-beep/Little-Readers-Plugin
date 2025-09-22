@@ -159,11 +159,24 @@ class LittleReadersPlugin {
         $response = wp_remote_get($url, array('timeout' => 30));
         
         if (is_wp_error($response)) {
-            wp_send_json_error('Failed to check availability');
+            error_log('LRP: Failed to check availability - ' . $response->get_error_message());
+            wp_send_json_error('Failed to check availability: ' . $response->get_error_message());
+        }
+        
+        $response_code = wp_remote_retrieve_response_code($response);
+        if ($response_code !== 200) {
+            error_log('LRP: Check availability API returned status ' . $response_code);
+            wp_send_json_error('Backend returned status ' . $response_code);
         }
         
         $body = wp_remote_retrieve_body($response);
         $data = json_decode($body, true);
+        
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            error_log('LRP: Invalid JSON response from check availability API: ' . $body);
+            wp_send_json_error('Invalid response from backend');
+        }
+        
         wp_send_json_success($data);
     }
     
@@ -173,11 +186,24 @@ class LittleReadersPlugin {
         $response = wp_remote_get($url, array('timeout' => 30));
         
         if (is_wp_error($response)) {
-            wp_send_json_error('Failed to get delivery price');
+            error_log('LRP: Failed to get delivery price - ' . $response->get_error_message());
+            wp_send_json_error('Failed to get delivery price: ' . $response->get_error_message());
+        }
+        
+        $response_code = wp_remote_retrieve_response_code($response);
+        if ($response_code !== 200) {
+            error_log('LRP: Delivery price API returned status ' . $response_code);
+            wp_send_json_error('Backend returned status ' . $response_code);
         }
         
         $body = wp_remote_retrieve_body($response);
         $data = json_decode($body, true);
+        
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            error_log('LRP: Invalid JSON response from delivery price API: ' . $body);
+            wp_send_json_error('Invalid response from backend');
+        }
+        
         wp_send_json_success($data);
     }
     
@@ -235,11 +261,23 @@ class LittleReadersPlugin {
         $response = wp_remote_get($url, array('timeout' => 30));
         
         if (is_wp_error($response)) {
-            wp_send_json_error('Failed to validate promo code');
+            error_log('LRP: Failed to validate promo code - ' . $response->get_error_message());
+            wp_send_json_error('Failed to validate promo code: ' . $response->get_error_message());
+        }
+        
+        $response_code = wp_remote_retrieve_response_code($response);
+        if ($response_code !== 200) {
+            error_log('LRP: Validate promo API returned status ' . $response_code);
+            wp_send_json_error('Backend returned status ' . $response_code);
         }
         
         $body = wp_remote_retrieve_body($response);
         $data = json_decode($body, true);
+        
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            error_log('LRP: Invalid JSON response from validate promo API: ' . $body);
+            wp_send_json_error('Invalid response from backend');
+        }
         
         // Cache for 1 hour
         set_transient($cache_key, $data, HOUR_IN_SECONDS);

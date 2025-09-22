@@ -321,6 +321,8 @@ jQuery(document).ready(function($) {
             applyBtn.disabled = true;
         }
 
+        console.log('LRP: Validating promo code:', code);
+
         $.ajax({
             url: lrp_ajax.ajax_url,
             type: 'POST',
@@ -331,6 +333,7 @@ jQuery(document).ready(function($) {
                 nonce: lrp_ajax.nonce
             },
             success: function(response) {
+                console.log('LRP: Promo validation response:', response);
                 if (response.success && response.data && response.data.valid) {
                     activePromo = { code: response.data.code, discount: response.data.discount };
                     if (errorMsg) errorMsg.textContent = "";
@@ -351,7 +354,8 @@ jQuery(document).ready(function($) {
                     applyBtn.disabled = false;
                 }
             },
-            error: function() {
+            error: function(xhr, status, error) {
+                console.error('LRP: AJAX error validating promo code:', status, error, xhr.responseText);
                 if (errorMsg) errorMsg.textContent = "Error validating code. Please try again.";
                 if (applyBtn) {
                     applyBtn.textContent = "Apply";
@@ -495,6 +499,8 @@ jQuery(document).ready(function($) {
             selectedDeliveryFee = null;
             if (areaInput) areaInput.classList.remove('error');
         } else {
+            console.log('LRP: Checking delivery price for area:', area);
+            
             $.ajax({
                 url: lrp_ajax.ajax_url,
                 type: 'POST',
@@ -505,6 +511,7 @@ jQuery(document).ready(function($) {
                     nonce: lrp_ajax.nonce
                 },
                 success: function(response) {
+                    console.log('LRP: Delivery price response:', response);
                     if (response.success && response.data.found) {
                         selectedDeliveryFee = Number(response.data.price || 0);
                         if (areaFeeMsg) areaFeeMsg.textContent = `Delivery to ${response.data.matched}: UGX ${Number(response.data.price).toLocaleString()}`;
@@ -517,6 +524,13 @@ jQuery(document).ready(function($) {
                         if (areaInput) areaInput.classList.add('error');
                     }
                     updateOrderSummary(cart.reduce((sum, b) => sum + (b.price||0), 0));
+                },
+                error: function(xhr, status, error) {
+                    console.error('LRP: AJAX error checking delivery price:', status, error, xhr.responseText);
+                    selectedDeliveryFee = null;
+                    if (areaFeeMsg) areaFeeMsg.textContent = '';
+                    if (areaErrorMsg) areaErrorMsg.textContent = "Error checking delivery area. Please try again.";
+                    if (areaInput) areaInput.classList.add('error');
                 }
             });
         }
@@ -525,6 +539,8 @@ jQuery(document).ready(function($) {
     function validateCartBooks() {
         if (cart.length === 0) return;
         const codes = cart.map(b => b.code);
+        
+        console.log('LRP: Validating cart books:', codes);
         
         $.ajax({
             url: lrp_ajax.ajax_url,
@@ -536,6 +552,7 @@ jQuery(document).ready(function($) {
                 nonce: lrp_ajax.nonce
             },
             success: function(response) {
+                console.log('LRP: Cart validation response:', response);
                 if (response.success) {
                     const result = response.data;
                     const unavailable = codes.filter(code => !result[code] || !result[code].available)
@@ -550,6 +567,9 @@ jQuery(document).ready(function($) {
                         hideStatusBar();
                     }
                 }
+            },
+            error: function(xhr, status, error) {
+                console.error('LRP: AJAX error validating cart books:', status, error, xhr.responseText);
             }
         });
     }
@@ -643,6 +663,8 @@ jQuery(document).ready(function($) {
         }
 
         // First check availability
+        console.log('LRP: Final availability check before order submission for codes:', codes);
+        
         $.ajax({
             url: lrp_ajax.ajax_url,
             type: 'POST',
@@ -653,6 +675,7 @@ jQuery(document).ready(function($) {
                 nonce: lrp_ajax.nonce
             },
             success: function(response) {
+                console.log('LRP: Final availability check response:', response);
                 if (response.success) {
                     const availabilityResult = response.data;
                     const unavailable = codes.filter(code => !availabilityResult[code] || !availabilityResult[code].available)
@@ -732,7 +755,8 @@ jQuery(document).ready(function($) {
                     });
                 }
             },
-            error: function() {
+            error: function(xhr, status, error) {
+                console.error('LRP: AJAX error in final availability check:', status, error, xhr.responseText);
                 alert('Error checking book availability. Please try again.');
                 if (submitBtn) {
                     submitBtn.disabled = false;
