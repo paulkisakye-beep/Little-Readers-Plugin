@@ -566,6 +566,7 @@ jQuery(document).ready(function($) {
         const codes = cart.map(b => b.code);
         
         console.log('LRP: Validating cart books:', codes);
+        console.log('LRP: Current cart contents:', cart);
         
         $.ajax({
             url: lrp_ajax.ajax_url,
@@ -578,10 +579,30 @@ jQuery(document).ready(function($) {
             },
             success: function(response) {
                 console.log('LRP: Cart validation response:', response);
+                console.log('LRP: Response type:', typeof response);
+                console.log('LRP: Response structure:', JSON.stringify(response, null, 2));
+                
                 if (response.success) {
                     const result = response.data;
-                    const unavailable = codes.filter(code => !result[code] || !result[code].available)
-                                           .map(code => ({ code, status: result[code] ? result[code].status : 'unavailable' }));
+                    console.log('LRP: Availability data:', result);
+                    console.log('LRP: Availability data type:', typeof result);
+                    
+                    if (!result || (typeof result !== 'object')) {
+                        console.error('LRP: Invalid availability data format:', result);
+                        return;
+                    }
+                    
+                    const unavailable = codes.filter(code => {
+                        const bookAvailability = result[code];
+                        console.log(`LRP: Checking availability for ${code}:`, bookAvailability);
+                        return !bookAvailability || !bookAvailability.available;
+                    }).map(code => ({ 
+                        code, 
+                        status: result[code] ? result[code].status : 'unavailable' 
+                    }));
+                    
+                    console.log('LRP: Unavailable books:', unavailable);
+                    
                     if (unavailable.length > 0) {
                         showStatusBar(unavailable);
                         cart = cart.filter(b => !unavailable.find(u => u.code === b.code));
@@ -591,10 +612,14 @@ jQuery(document).ready(function($) {
                     } else {
                         hideStatusBar();
                     }
+                } else {
+                    console.error('LRP: Availability check failed:', response);
                 }
             },
             error: function(xhr, status, error) {
-                console.error('LRP: AJAX error validating cart books:', status, error, xhr.responseText);
+                console.error('LRP: AJAX error validating cart books:', status, error);
+                console.error('LRP: XHR response text:', xhr.responseText);
+                console.error('LRP: XHR status:', xhr.status);
             }
         });
     }
@@ -717,10 +742,32 @@ jQuery(document).ready(function($) {
             },
             success: function(response) {
                 console.log('LRP: Final availability check response:', response);
+                console.log('LRP: Final availability response structure:', JSON.stringify(response, null, 2));
+                
                 if (response.success) {
                     const availabilityResult = response.data;
-                    const unavailable = codes.filter(code => !availabilityResult[code] || !availabilityResult[code].available)
-                                             .map(code => ({ code, status: availabilityResult[code] ? availabilityResult[code].status : 'unavailable' }));
+                    console.log('LRP: Final availability data:', availabilityResult);
+                    
+                    if (!availabilityResult || (typeof availabilityResult !== 'object')) {
+                        console.error('LRP: Invalid final availability data format:', availabilityResult);
+                        alert('Error checking book availability. Please try again.');
+                        if (submitBtn) {
+                            submitBtn.disabled = false;
+                            submitBtn.textContent = 'Place Order';
+                        }
+                        return;
+                    }
+                    
+                    const unavailable = codes.filter(code => {
+                        const bookAvailability = availabilityResult[code];
+                        console.log(`LRP: Final check for ${code}:`, bookAvailability);
+                        return !bookAvailability || !bookAvailability.available;
+                    }).map(code => ({ 
+                        code, 
+                        status: availabilityResult[code] ? availabilityResult[code].status : 'unavailable' 
+                    }));
+                    
+                    console.log('LRP: Final unavailable books:', unavailable);
                     
                     if (unavailable.length > 0) {
                         showStatusBar(unavailable);
@@ -810,6 +857,13 @@ jQuery(document).ready(function($) {
                             }
                         }
                     });
+                } else {
+                    console.error('LRP: Final availability check failed:', response);
+                    alert('Failed to verify book availability: ' + (response.data || response.message || 'Unknown error'));
+                    if (submitBtn) {
+                        submitBtn.disabled = false;
+                        submitBtn.textContent = 'Place Order';
+                    }
                 }
             },
             error: function(xhr, status, error) {

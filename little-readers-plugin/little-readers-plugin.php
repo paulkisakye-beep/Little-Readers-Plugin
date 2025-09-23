@@ -155,7 +155,13 @@ class LittleReadersPlugin {
     
     private function proxy_check_availability($backend_url, $post_data) {
         $codes = sanitize_text_field($post_data['codes']);
+        
+        // Enhanced logging for debugging
+        error_log('LRP: Checking availability for codes: ' . $codes);
+        
         $url = $backend_url . '?action=checkAvailability&codes=' . urlencode($codes);
+        error_log('LRP: Availability check URL: ' . $url);
+        
         $response = wp_remote_get($url, array('timeout' => 30));
         
         if (is_wp_error($response)) {
@@ -170,11 +176,21 @@ class LittleReadersPlugin {
         }
         
         $body = wp_remote_retrieve_body($response);
+        error_log('LRP: Availability check raw response: ' . $body);
+        
         $data = json_decode($body, true);
         
         if (json_last_error() !== JSON_ERROR_NONE) {
             error_log('LRP: Invalid JSON response from check availability API: ' . $body);
             wp_send_json_error('Invalid response from backend');
+        }
+        
+        error_log('LRP: Availability check parsed data: ' . json_encode($data));
+        
+        // Validate response structure
+        if (!is_array($data) && !is_object($data)) {
+            error_log('LRP: Unexpected availability response format: ' . gettype($data));
+            wp_send_json_error('Unexpected response format from backend');
         }
         
         wp_send_json_success($data);
