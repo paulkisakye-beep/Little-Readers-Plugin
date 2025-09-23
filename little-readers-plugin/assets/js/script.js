@@ -11,9 +11,15 @@ jQuery(document).ready(function($) {
     let lastFocusedElement = null;
     let activePromo = null; // { code: string, discount: number }
     
-    // Debouncing timers to prevent rate limiting
+    // Enhanced debouncing and rate limiting protection
     let deliveryAreaTimer = null;
     let promoCodeTimer = null;
+    let lastDeliveryAreaCall = 0;
+    let lastPromoCodeCall = 0;
+    let pendingRequests = new Set();
+    
+    // Minimum time between API calls (in milliseconds)
+    const MIN_API_INTERVAL = 2000; // 2 seconds between calls
 
     // Global functions for onclick handlers and event listeners
     window.lrpAddToCart = function(bookCode, evt) {
@@ -327,6 +333,24 @@ jQuery(document).ready(function($) {
             if (errorMsg) errorMsg.textContent = "Please enter a promo code.";
             return;
         }
+        
+        // Rate limiting protection
+        const now = Date.now();
+        const requestKey = 'promo_' + code;
+        
+        if (pendingRequests.has(requestKey)) {
+            console.log('LRP: Promo validation request already pending for:', code);
+            return;
+        }
+        
+        if (now - lastPromoCodeCall < MIN_API_INTERVAL) {
+            console.log('LRP: Rate limiting - delaying promo code validation');
+            setTimeout(() => validatePromoCode(), MIN_API_INTERVAL - (now - lastPromoCodeCall));
+            return;
+        }
+        
+        pendingRequests.add(requestKey);
+        lastPromoCodeCall = now;
 
         if (applyBtn) {
             applyBtn.textContent = "Checking...";
@@ -345,6 +369,7 @@ jQuery(document).ready(function($) {
                 nonce: lrp_ajax.nonce
             },
             success: function(response) {
+                pendingRequests.delete(requestKey);
                 console.log('LRP: Promo validation response:', response);
                 console.log('LRP: Response data structure:', JSON.stringify(response, null, 2));
                 
@@ -392,6 +417,7 @@ jQuery(document).ready(function($) {
                 }
             },
             error: function(xhr, status, error) {
+                pendingRequests.delete(requestKey);
                 console.error('LRP: AJAX error validating promo code:', status, error, xhr.responseText);
                 
                 // Handle rate limiting specifically
@@ -538,10 +564,17 @@ jQuery(document).ready(function($) {
             clearTimeout(deliveryAreaTimer);
         }
         
+        // Check if we're hitting rate limits
+        const now = Date.now();
+        const timeSinceLastCall = now - lastDeliveryAreaCall;
+        
+        // If we called the API recently, wait longer
+        const delay = timeSinceLastCall < MIN_API_INTERVAL ? MIN_API_INTERVAL - timeSinceLastCall + 500 : 1000;
+        
         // Set a new timer to delay the API call
         deliveryAreaTimer = setTimeout(() => {
             performDeliveryAreaCheck();
-        }, 500); // 500ms delay
+        }, delay);
     }
     
     function performDeliveryAreaCheck() {
@@ -556,70 +589,91 @@ jQuery(document).ready(function($) {
             selectedDeliveryFee = null;
             if (areaInput) areaInput.classList.remove('error');
             updateOrderSummary(cart.reduce((sum, b) => sum + (b.price||0), 0));
-        } else {
-            console.log('LRP: Checking delivery price for area:', area);
-            
-            $.ajax({
-                url: lrp_ajax.ajax_url,
-                type: 'POST',
-                data: {
-                    action: 'lrp_api_proxy',
-                    api_action: 'deliveryPrice',
-                    area: area,
-                    nonce: lrp_ajax.nonce
-                },
-                success: function(response) {
-                    console.log('LRP: Delivery price response:', response);
-                    if (response.success && response.data && response.data.found) {
-                        const newFee = Number(response.data.price || 0);
-                        const matchedArea = response.data.matched;
-                        
-                        selectedDeliveryFee = newFee;
-                        if (areaFeeMsg) areaFeeMsg.textContent = `Delivery to ${matchedArea}: UGX ${newFee.toLocaleString()}`;
-                        if (areaErrorMsg) areaErrorMsg.textContent = '';
-                        if (areaInput) areaInput.classList.remove('error');
-                        
-                        console.log('LRP: Updated delivery fee to:', newFee, 'for area:', matchedArea);
-                    } else {
-                        selectedDeliveryFee = null;
-                        if (areaFeeMsg) areaFeeMsg.textContent = '';
-                        
-                        // Enhanced error handling
-                        let errorMessage = "Sorry, we don't deliver to this area.";
-                        if (response.data && typeof response.data === 'string') {
-                            if (response.data.includes('Invalid delivery area')) {
-                                errorMessage = "Please select from the dropdown or type a valid area name.";
-                            } else if (response.data.includes('Too many requests')) {
-                                errorMessage = "Too many requests. Please wait a moment and try again.";
-                            } else if (response.data.includes('temporarily unavailable')) {
-                                errorMessage = "Delivery service temporarily unavailable. Please try again.";
-                            }
-                        }
-                        
-                        if (areaErrorMsg) areaErrorMsg.textContent = errorMessage;
-                        if (areaInput) areaInput.classList.add('error');
-                        console.log('LRP: No delivery available for area:', area, 'Error:', response.data);
-                    }
-                    updateOrderSummary(cart.reduce((sum, b) => sum + (b.price||0), 0));
-                },
-                error: function(xhr, status, error) {
-                    console.error('LRP: AJAX error checking delivery price:', status, error, xhr.responseText);
+            return;
+        }
+        
+        // Rate limiting protection
+        const now = Date.now();
+        const requestKey = 'delivery_' + area;
+        
+        if (pendingRequests.has(requestKey)) {
+            console.log('LRP: Delivery area request already pending for:', area);
+            return;
+        }
+        
+        if (now - lastDeliveryAreaCall < MIN_API_INTERVAL) {
+            console.log('LRP: Rate limiting - delaying delivery area check');
+            setTimeout(() => performDeliveryAreaCheck(), MIN_API_INTERVAL - (now - lastDeliveryAreaCall));
+            return;
+        }
+        
+        pendingRequests.add(requestKey);
+        lastDeliveryAreaCall = now;
+        
+        console.log('LRP: Checking delivery price for area:', area);
+        
+        $.ajax({
+            url: lrp_ajax.ajax_url,
+            type: 'POST',
+            data: {
+                action: 'lrp_api_proxy',
+                api_action: 'deliveryPrice',
+                area: area,
+                nonce: lrp_ajax.nonce
+            },
+            success: function(response) {
+                pendingRequests.delete(requestKey);
+                console.log('LRP: Delivery price response:', response);
+                if (response.success && response.data && response.data.found) {
+                    const newFee = Number(response.data.price || 0);
+                    const matchedArea = response.data.matched;
                     
-                    // Handle rate limiting specifically
-                    if (xhr.status === 429) {
-                        console.warn('LRP: Rate limited - too many requests. Please wait before checking delivery areas.');
-                        if (areaErrorMsg) areaErrorMsg.textContent = "Too many requests. Please wait a moment and try again.";
-                        if (areaInput) areaInput.classList.add('error');
-                        return;
-                    }
+                    selectedDeliveryFee = newFee;
+                    if (areaFeeMsg) areaFeeMsg.textContent = `Delivery to ${matchedArea}: UGX ${newFee.toLocaleString()}`;
+                    if (areaErrorMsg) areaErrorMsg.textContent = '';
+                    if (areaInput) areaInput.classList.remove('error');
                     
+                    console.log('LRP: Updated delivery fee to:', newFee, 'for area:', matchedArea);
+                } else {
                     selectedDeliveryFee = null;
                     if (areaFeeMsg) areaFeeMsg.textContent = '';
-                    if (areaErrorMsg) areaErrorMsg.textContent = "Error checking delivery area. Please try again.";
+                    
+                    // Enhanced error handling
+                    let errorMessage = "Sorry, we don't deliver to this area.";
+                    if (response.data && typeof response.data === 'string') {
+                        if (response.data.includes('Invalid delivery area')) {
+                            errorMessage = "Please select from the dropdown or type a valid area name.";
+                        } else if (response.data.includes('Too many requests')) {
+                            errorMessage = "Too many requests. Please wait a moment and try again.";
+                        } else if (response.data.includes('temporarily unavailable')) {
+                            errorMessage = "Delivery service temporarily unavailable. Please try again.";
+                        }
+                    }
+                    
+                    if (areaErrorMsg) areaErrorMsg.textContent = errorMessage;
                     if (areaInput) areaInput.classList.add('error');
+                    console.log('LRP: No delivery available for area:', area, 'Error:', response.data);
                 }
-            });
-        }
+                updateOrderSummary(cart.reduce((sum, b) => sum + (b.price||0), 0));
+            },
+            error: function(xhr, status, error) {
+                pendingRequests.delete(requestKey);
+                console.error('LRP: AJAX error checking delivery price:', status, error, xhr.responseText);
+                
+                // Handle rate limiting specifically
+                if (xhr.status === 429) {
+                    console.warn('LRP: Rate limited - too many requests. Please wait before checking delivery areas.');
+                    if (areaErrorMsg) areaErrorMsg.textContent = "Too many requests. Please wait a moment and try again.";
+                    if (areaInput) areaInput.classList.add('error');
+                    return;
+                }
+                
+                selectedDeliveryFee = null;
+                if (areaFeeMsg) areaFeeMsg.textContent = '';
+                if (areaErrorMsg) areaErrorMsg.textContent = "Error checking delivery area. Please try again.";
+                if (areaInput) areaInput.classList.add('error');
+            }
+        });
     }
 
     function validateCartBooks() {

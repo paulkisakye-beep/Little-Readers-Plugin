@@ -204,6 +204,19 @@ class LittleReadersPlugin {
     private function proxy_delivery_price($backend_url, $post_data) {
         $area = sanitize_text_field($post_data['area']);
         
+        // Server-side rate limiting per area
+        $rate_limit_key = 'lrp_rate_limit_delivery_' . md5($area . $_SERVER['REMOTE_ADDR']);
+        $recent_calls = get_transient($rate_limit_key);
+        
+        if ($recent_calls && $recent_calls >= 3) {
+            error_log('LRP: Rate limiting delivery area check for: ' . $area . ' from IP: ' . $_SERVER['REMOTE_ADDR']);
+            wp_send_json_error('Too many requests. Please wait a moment and try again.');
+            return;
+        }
+        
+        // Increment rate limit counter
+        set_transient($rate_limit_key, ($recent_calls ? $recent_calls + 1 : 1), 60); // 1 minute window
+        
         // Clear cache flag for testing
         $clear_cache = isset($post_data['clear_cache']) && $post_data['clear_cache'] === 'true';
         if ($clear_cache) {
@@ -257,9 +270,12 @@ class LittleReadersPlugin {
         
         error_log('LRP: Delivery price response for area "' . $area . '": ' . $response_body);
         
-        // Cache successful responses for 30 minutes to reduce API calls during high traffic
+        // Cache successful responses for 2 hours to significantly reduce API calls during high traffic
         if (isset($data['found']) && $data['found'] === true) {
-            set_transient($cache_key, $data, 30 * MINUTE_IN_SECONDS);
+            set_transient($cache_key, $data, 2 * HOUR_IN_SECONDS);
+        } else {
+            // Cache negative results for 10 minutes to prevent repeated failed lookups
+            set_transient($cache_key, $data, 10 * MINUTE_IN_SECONDS);
         }
         
         wp_send_json_success($data);
@@ -310,6 +326,19 @@ class LittleReadersPlugin {
             wp_send_json_error('Please enter a promo code');
             return;
         }
+        
+        // Server-side rate limiting per promo code
+        $rate_limit_key = 'lrp_rate_limit_promo_' . md5($code . $_SERVER['REMOTE_ADDR']);
+        $recent_calls = get_transient($rate_limit_key);
+        
+        if ($recent_calls && $recent_calls >= 3) {
+            error_log('LRP: Rate limiting promo validation for: ' . $code . ' from IP: ' . $_SERVER['REMOTE_ADDR']);
+            wp_send_json_error('Too many requests. Please wait a moment and try again.');
+            return;
+        }
+        
+        // Increment rate limit counter
+        set_transient($rate_limit_key, ($recent_calls ? $recent_calls + 1 : 1), 60); // 1 minute window
         
         // Check cache first (1 hour = 3600 seconds)
         $cache_key = 'lrp_promo_' . md5($code);
