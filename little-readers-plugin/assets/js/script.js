@@ -368,7 +368,22 @@ jQuery(document).ready(function($) {
                 } else {
                     activePromo = null;
                     console.error('LRP: Unexpected promo validation response structure:', response);
-                    if (errorMsg) errorMsg.textContent = "Error validating promo code.";
+                    
+                    // Enhanced error handling for different response types
+                    let errorMessage = "Error validating promo code.";
+                    if (response.data && typeof response.data === 'string') {
+                        if (response.data.includes('Invalid promo code format')) {
+                            errorMessage = "Invalid promo code format. Please check and try again.";
+                        } else if (response.data.includes('Too many requests')) {
+                            errorMessage = "Too many requests. Please wait a moment and try again.";
+                        } else if (response.data.includes('temporarily unavailable')) {
+                            errorMessage = "Promo validation temporarily unavailable. Please try again.";
+                        } else if (response.data.includes('Backend returned status 400')) {
+                            errorMessage = "Invalid promo code. Please check and try again.";
+                        }
+                    }
+                    
+                    if (errorMsg) errorMsg.textContent = errorMessage;
                 }
                 updateOrderSummary(cart.reduce((sum, b) => sum + (b.price || 0), 0));
                 if (applyBtn) {
@@ -568,9 +583,22 @@ jQuery(document).ready(function($) {
                     } else {
                         selectedDeliveryFee = null;
                         if (areaFeeMsg) areaFeeMsg.textContent = '';
-                        if (areaErrorMsg) areaErrorMsg.textContent = "Sorry, we don't deliver to this area.";
+                        
+                        // Enhanced error handling
+                        let errorMessage = "Sorry, we don't deliver to this area.";
+                        if (response.data && typeof response.data === 'string') {
+                            if (response.data.includes('Invalid delivery area')) {
+                                errorMessage = "Please select from the dropdown or type a valid area name.";
+                            } else if (response.data.includes('Too many requests')) {
+                                errorMessage = "Too many requests. Please wait a moment and try again.";
+                            } else if (response.data.includes('temporarily unavailable')) {
+                                errorMessage = "Delivery service temporarily unavailable. Please try again.";
+                            }
+                        }
+                        
+                        if (areaErrorMsg) areaErrorMsg.textContent = errorMessage;
                         if (areaInput) areaInput.classList.add('error');
-                        console.log('LRP: No delivery available for area:', area);
+                        console.log('LRP: No delivery available for area:', area, 'Error:', response.data);
                     }
                     updateOrderSummary(cart.reduce((sum, b) => sum + (b.price||0), 0));
                 },
@@ -852,15 +880,20 @@ jQuery(document).ready(function($) {
                             // Handle both direct response and nested response structures
                             let orderData = orderResponse.data || orderResponse;
                             
-                            if (orderResponse.success && orderData && orderData.success) {
+                            // Enhanced success detection
+                            const isSuccess = (orderResponse.success === true) || 
+                                            (orderData && (orderData.success === true || orderData.orderId));
+                            
+                            if (isSuccess) {
                                 const orderForm = document.getElementById('lrpOrderForm');
                                 const successMessage = document.getElementById('lrpSuccessMessage');
                                 
                                 if (orderForm) orderForm.style.display = 'none';
                                 if (successMessage) {
+                                    const orderId = orderData.orderId || orderData.id || 'ORDER-' + Date.now();
                                     successMessage.innerHTML = `
                                         <h3>✅ Order Submitted Successfully!</h3>
-                                        <p><strong>Order ID: ${orderData.orderId}</strong></p>
+                                        <p><strong>Order ID: ${orderId}</strong></p>
                                         <p>Check your SMS for payment details.</p>
                                         <p>Your books are reserved for 24 hours.</p>`;
                                     successMessage.style.display = 'block';
@@ -875,10 +908,28 @@ jQuery(document).ready(function($) {
                                 }, 7000);
                             } else {
                                 console.error('LRP: Order submission failed:', orderResponse);
-                                // Check multiple possible error message locations
-                                const errorMsg = orderData?.error || orderData?.message || 
-                                               orderResponse.data?.error || orderResponse.message || 
-                                               'Unknown error - check console for details';
+                                // Enhanced error message handling
+                                let errorMsg = 'Unknown error occurred';
+                                
+                                if (orderData?.error) {
+                                    errorMsg = orderData.error;
+                                } else if (orderResponse.data && typeof orderResponse.data === 'string') {
+                                    errorMsg = orderResponse.data; // Handle "Backend returned status 400" messages
+                                } else if (orderData?.message) {
+                                    errorMsg = orderData.message;
+                                } else if (orderResponse.message) {
+                                    errorMsg = orderResponse.message;
+                                }
+                                
+                                // User-friendly error messages
+                                if (errorMsg.includes('status 400')) {
+                                    errorMsg = 'Invalid order data. Please check all fields and try again.';
+                                } else if (errorMsg.includes('status 429')) {
+                                    errorMsg = 'Too many requests. Please wait a moment and try again.';
+                                } else if (errorMsg.includes('Unauthorized')) {
+                                    errorMsg = 'Authentication error. Please contact support.';
+                                }
+                                
                                 alert('Failed to submit order: ' + errorMsg);
                                 if (submitBtn) {
                                     submitBtn.disabled = false;

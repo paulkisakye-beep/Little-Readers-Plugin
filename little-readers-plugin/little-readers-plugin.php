@@ -212,7 +212,19 @@ class LittleReadersPlugin {
             error_log('LRP: Cleared delivery cache for debugging');
         }
         
+        // Check cache first (cache delivery pricing for better performance)
+        $cache_key = 'lrp_delivery_price_' . md5($area);
+        $cached_data = get_transient($cache_key);
+        
+        if ($cached_data !== false && !$clear_cache) {
+            error_log('LRP: Using cached delivery price for area: ' . $area);
+            wp_send_json_success($cached_data);
+            return;
+        }
+        
         $url = $backend_url . '?action=deliveryPrice&area=' . urlencode($area);
+        error_log('LRP: Requesting delivery price from: ' . $url);
+        
         $response = wp_remote_get($url, array('timeout' => 30));
         
         if (is_wp_error($response)) {
@@ -221,25 +233,35 @@ class LittleReadersPlugin {
         }
         
         $response_code = wp_remote_retrieve_response_code($response);
+        $response_body = wp_remote_retrieve_body($response);
+        
         if ($response_code !== 200) {
             if ($response_code === 429) {
                 error_log('LRP: Rate limited (429) - too many requests to Google Apps Script backend');
-                wp_send_json_error('Rate limited: Too many requests. Please wait a moment and try again.');
+                wp_send_json_error('Too many requests. Please wait a moment and try again.');
+            } else if ($response_code === 400) {
+                error_log('LRP: Bad request (400) for delivery area: ' . $area . ' Response: ' . $response_body);
+                wp_send_json_error('Invalid delivery area. Please select from the dropdown or type a valid area name.');
             } else {
-                error_log('LRP: Delivery price API returned status ' . $response_code);
-                wp_send_json_error('Backend returned status ' . $response_code);
+                error_log('LRP: Delivery price API returned status ' . $response_code . ' Response: ' . $response_body);
+                wp_send_json_error('Delivery service temporarily unavailable. Please try again.');
             }
         }
         
-        $body = wp_remote_retrieve_body($response);
-        $data = json_decode($body, true);
+        $data = json_decode($response_body, true);
         
         if (json_last_error() !== JSON_ERROR_NONE) {
-            error_log('LRP: Invalid JSON response from delivery price API: ' . $body);
-            wp_send_json_error('Invalid response from backend');
+            error_log('LRP: Invalid JSON response from delivery price API: ' . $response_body);
+            wp_send_json_error('Invalid response from delivery service');
         }
         
-        error_log('LRP: Delivery price response for area "' . $area . '": ' . $body);
+        error_log('LRP: Delivery price response for area "' . $area . '": ' . $response_body);
+        
+        // Cache successful responses for 30 minutes to reduce API calls during high traffic
+        if (isset($data['found']) && $data['found'] === true) {
+            set_transient($cache_key, $data, 30 * MINUTE_IN_SECONDS);
+        }
+        
         wp_send_json_success($data);
     }
     
@@ -284,16 +306,24 @@ class LittleReadersPlugin {
     private function proxy_validate_promo($backend_url, $post_data) {
         $code = sanitize_text_field($post_data['code']);
         
+        if (empty($code)) {
+            wp_send_json_error('Please enter a promo code');
+            return;
+        }
+        
         // Check cache first (1 hour = 3600 seconds)
         $cache_key = 'lrp_promo_' . md5($code);
         $cached_data = get_transient($cache_key);
         
         if ($cached_data !== false) {
+            error_log('LRP: Using cached promo validation for: ' . $code);
             wp_send_json_success($cached_data);
             return;
         }
         
         $url = $backend_url . '?action=validatePromo&code=' . urlencode($code);
+        error_log('LRP: Requesting promo validation from: ' . $url);
+        
         $response = wp_remote_get($url, array('timeout' => 30));
         
         if (is_wp_error($response)) {
@@ -302,26 +332,36 @@ class LittleReadersPlugin {
         }
         
         $response_code = wp_remote_retrieve_response_code($response);
+        $response_body = wp_remote_retrieve_body($response);
+        
         if ($response_code !== 200) {
             if ($response_code === 429) {
                 error_log('LRP: Rate limited (429) - too many requests during promo validation');
-                wp_send_json_error('Rate limited: Too many requests. Please wait a moment and try again.');
+                wp_send_json_error('Too many requests. Please wait a moment and try again.');
+            } else if ($response_code === 400) {
+                error_log('LRP: Bad request (400) for promo code: ' . $code . ' Response: ' . $response_body);
+                wp_send_json_error('Invalid promo code format. Please check and try again.');
             } else {
-                error_log('LRP: Validate promo API returned status ' . $response_code);
-                wp_send_json_error('Backend returned status ' . $response_code);
+                error_log('LRP: Validate promo API returned status ' . $response_code . ' Response: ' . $response_body);
+                wp_send_json_error('Promo validation service temporarily unavailable. Please try again.');
             }
         }
         
-        $body = wp_remote_retrieve_body($response);
-        $data = json_decode($body, true);
+        $data = json_decode($response_body, true);
         
         if (json_last_error() !== JSON_ERROR_NONE) {
-            error_log('LRP: Invalid JSON response from validate promo API: ' . $body);
-            wp_send_json_error('Invalid response from backend');
+            error_log('LRP: Invalid JSON response from validate promo API: ' . $response_body);
+            wp_send_json_error('Invalid response from promo service');
         }
         
-        // Cache for 1 hour
-        set_transient($cache_key, $data, HOUR_IN_SECONDS);
+        error_log('LRP: Promo validation response for "' . $code . '": ' . $response_body);
+        
+        // Cache valid promo codes for 1 hour, invalid ones for 5 minutes only
+        if (isset($data['valid']) && $data['valid'] === true) {
+            set_transient($cache_key, $data, HOUR_IN_SECONDS);
+        } else {
+            set_transient($cache_key, $data, 5 * MINUTE_IN_SECONDS);
+        }
         
         wp_send_json_success($data);
     }
@@ -334,7 +374,9 @@ class LittleReadersPlugin {
             wp_send_json_error('Invalid order data');
         }
         
-        // Add API key as a query parameter
+        error_log('LRP: Submitting order data: ' . json_encode($order_data));
+        
+        // Google Apps Script doPost expects JSON in body and apiKey as URL parameter
         $url = $backend_url . '?apiKey=' . urlencode($api_key);
         
         $response = wp_remote_post($url, array(
@@ -352,21 +394,31 @@ class LittleReadersPlugin {
         }
         
         $response_code = wp_remote_retrieve_response_code($response);
+        $response_body = wp_remote_retrieve_body($response);
+        
         if ($response_code !== 200) {
-            error_log('LRP: Process order API returned status ' . $response_code);
+            error_log('LRP: Process order API returned status ' . $response_code . ' Body: ' . $response_body);
             wp_send_json_error('Backend returned status ' . $response_code);
         }
         
-        $body = wp_remote_retrieve_body($response);
-        $data = json_decode($body, true);
+        $data = json_decode($response_body, true);
         
         if (json_last_error() !== JSON_ERROR_NONE) {
-            error_log('LRP: Invalid JSON response from process order API: ' . $body);
+            error_log('LRP: Invalid JSON response from process order API: ' . $response_body);
             wp_send_json_error('Invalid response from backend');
         }
         
-        error_log('LRP: Order processing response: ' . $body);
-        wp_send_json_success($data);
+        error_log('LRP: Order processing response: ' . $response_body);
+        
+        // Handle both direct response and nested response formats
+        if (isset($data['success']) && $data['success'] === true) {
+            wp_send_json_success($data);
+        } else if (isset($data['orderId'])) {
+            // Direct success response format
+            wp_send_json_success($data);
+        } else {
+            wp_send_json_success($data);
+        }
     }
     
     public function add_admin_menu() {
