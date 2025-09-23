@@ -171,8 +171,13 @@ class LittleReadersPlugin {
         
         $response_code = wp_remote_retrieve_response_code($response);
         if ($response_code !== 200) {
-            error_log('LRP: Check availability API returned status ' . $response_code);
-            wp_send_json_error('Backend returned status ' . $response_code);
+            if ($response_code === 429) {
+                error_log('LRP: Rate limited (429) - too many requests during availability check');
+                wp_send_json_error('Rate limited: Too many requests. Please wait a moment and try again.');
+            } else {
+                error_log('LRP: Check availability API returned status ' . $response_code);
+                wp_send_json_error('Backend returned status ' . $response_code);
+            }
         }
         
         $body = wp_remote_retrieve_body($response);
@@ -217,8 +222,13 @@ class LittleReadersPlugin {
         
         $response_code = wp_remote_retrieve_response_code($response);
         if ($response_code !== 200) {
-            error_log('LRP: Delivery price API returned status ' . $response_code);
-            wp_send_json_error('Backend returned status ' . $response_code);
+            if ($response_code === 429) {
+                error_log('LRP: Rate limited (429) - too many requests to Google Apps Script backend');
+                wp_send_json_error('Rate limited: Too many requests. Please wait a moment and try again.');
+            } else {
+                error_log('LRP: Delivery price API returned status ' . $response_code);
+                wp_send_json_error('Backend returned status ' . $response_code);
+            }
         }
         
         $body = wp_remote_retrieve_body($response);
@@ -293,8 +303,13 @@ class LittleReadersPlugin {
         
         $response_code = wp_remote_retrieve_response_code($response);
         if ($response_code !== 200) {
-            error_log('LRP: Validate promo API returned status ' . $response_code);
-            wp_send_json_error('Backend returned status ' . $response_code);
+            if ($response_code === 429) {
+                error_log('LRP: Rate limited (429) - too many requests during promo validation');
+                wp_send_json_error('Rate limited: Too many requests. Please wait a moment and try again.');
+            } else {
+                error_log('LRP: Validate promo API returned status ' . $response_code);
+                wp_send_json_error('Backend returned status ' . $response_code);
+            }
         }
         
         $body = wp_remote_retrieve_body($response);

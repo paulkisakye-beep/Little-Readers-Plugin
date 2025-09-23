@@ -10,6 +10,10 @@ jQuery(document).ready(function($) {
     let selectedDeliveryFee = null;
     let lastFocusedElement = null;
     let activePromo = null; // { code: string, discount: number }
+    
+    // Debouncing timers to prevent rate limiting
+    let deliveryAreaTimer = null;
+    let promoCodeTimer = null;
 
     // Global functions for onclick handlers and event listeners
     window.lrpAddToCart = function(bookCode, evt) {
@@ -374,7 +378,15 @@ jQuery(document).ready(function($) {
             },
             error: function(xhr, status, error) {
                 console.error('LRP: AJAX error validating promo code:', status, error, xhr.responseText);
-                if (errorMsg) errorMsg.textContent = "Error validating code. Please try again.";
+                
+                // Handle rate limiting specifically
+                if (xhr.status === 429) {
+                    console.warn('LRP: Rate limited - too many requests for promo validation.');
+                    if (errorMsg) errorMsg.textContent = "Too many requests. Please wait a moment and try again.";
+                } else {
+                    if (errorMsg) errorMsg.textContent = "Error validating code. Please try again.";
+                }
+                
                 if (applyBtn) {
                     applyBtn.textContent = "Apply";
                     applyBtn.disabled = false;
@@ -506,6 +518,18 @@ jQuery(document).ready(function($) {
     }
 
     function onDeliveryAreaInput() {
+        // Clear any existing timer
+        if (deliveryAreaTimer) {
+            clearTimeout(deliveryAreaTimer);
+        }
+        
+        // Set a new timer to delay the API call
+        deliveryAreaTimer = setTimeout(() => {
+            performDeliveryAreaCheck();
+        }, 500); // 500ms delay
+    }
+    
+    function performDeliveryAreaCheck() {
         const areaInput = document.getElementById('lrpDeliveryArea');
         const area = areaInput ? areaInput.value.trim() : '';
         const areaFeeMsg = document.getElementById('lrpAreaFeeMsg');
@@ -552,6 +576,15 @@ jQuery(document).ready(function($) {
                 },
                 error: function(xhr, status, error) {
                     console.error('LRP: AJAX error checking delivery price:', status, error, xhr.responseText);
+                    
+                    // Handle rate limiting specifically
+                    if (xhr.status === 429) {
+                        console.warn('LRP: Rate limited - too many requests. Please wait before checking delivery areas.');
+                        if (areaErrorMsg) areaErrorMsg.textContent = "Too many requests. Please wait a moment and try again.";
+                        if (areaInput) areaInput.classList.add('error');
+                        return;
+                    }
+                    
                     selectedDeliveryFee = null;
                     if (areaFeeMsg) areaFeeMsg.textContent = '';
                     if (areaErrorMsg) areaErrorMsg.textContent = "Error checking delivery area. Please try again.";
@@ -620,6 +653,11 @@ jQuery(document).ready(function($) {
                 console.error('LRP: AJAX error validating cart books:', status, error);
                 console.error('LRP: XHR response text:', xhr.responseText);
                 console.error('LRP: XHR status:', xhr.status);
+                
+                // Handle rate limiting
+                if (xhr.status === 429) {
+                    console.warn('LRP: Rate limited during cart validation. Book availability checking temporarily restricted.');
+                }
             }
         });
     }
@@ -868,7 +906,15 @@ jQuery(document).ready(function($) {
             },
             error: function(xhr, status, error) {
                 console.error('LRP: AJAX error in final availability check:', status, error, xhr.responseText);
-                alert('Error checking book availability. Please try again.');
+                
+                // Handle rate limiting specifically
+                if (xhr.status === 429) {
+                    alert('Too many requests to the server. Please wait a moment and try again.');
+                    console.warn('LRP: Rate limited during final availability check.');
+                } else {
+                    alert('Error checking book availability. Please try again.');
+                }
+                
                 if (submitBtn) {
                     submitBtn.disabled = false;
                     submitBtn.textContent = 'Place Order';
